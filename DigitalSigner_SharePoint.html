@@ -30,111 +30,14 @@
         #stnIP, #stnPublicIP, #stnBrowser { animation: blink-green 2s infinite ease-in-out; font-weight: bold; }
         #stnIP:empty, #stnIP[data-empty="true"] { animation: none; color: #f59e0b; }
 
-        /* ── AUTH OVERLAY (modern light login screen) ── */
-        #authOverlay {
-            position: fixed; inset: 0;
-            background: linear-gradient(150deg, #f1f5f9 0%, #e9eef5 45%, #eef2ff 100%);
-            display: flex; justify-content: center; align-items: center;
-            z-index: 20000; color: var(--text); padding: 24px;
-        }
-        #authOverlay::before {
-            content: ""; position: absolute; inset: 0; pointer-events: none;
-            background:
-                radial-gradient(circle at 12% 18%, rgba(59,130,246,0.10), transparent 40%),
-                radial-gradient(circle at 88% 82%, rgba(30,58,138,0.10), transparent 42%);
-        }
-        .auth-box {
-            position: relative; background: #ffffff; padding: 38px 36px 32px;
-            border-radius: 22px; border: 1px solid #e7eaf0; max-width: 440px; width: 100%;
-            text-align: center; box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 30px 60px -20px rgba(15,23,42,0.18);
-            animation: authPop .3s cubic-bezier(.34,1.56,.64,1);
-        }
-        @keyframes authPop { from { transform: scale(0.96) translateY(10px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-        .auth-box::before {
-            content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-            width: 64%; height: 4px; border-radius: 0 0 8px 8px;
-            background: linear-gradient(90deg, var(--accent), var(--primary));
-        }
-        .auth-box input {
-            width: 100%; padding: 12px 14px; margin: 0; border-radius: 10px;
-            border: 1.5px solid #e2e8f0; background: #f8fafc; color: var(--text);
-            text-align: left; font-size: 0.95rem; transition: border-color .15s, background .15s, box-shadow .15s;
-            box-sizing: border-box;
-        }
-        .auth-box input::placeholder { color: #94a3b8; }
-        .auth-box input:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
-        .loader-text { font-size: 0.8rem; color: #d97706; margin-top: 10px; display: none; }
-        #ipLabel { color: var(--primary); font-weight: bold; margin-bottom: 15px; display: block; font-family: 'SF Mono', monospace; font-size: 0.85rem; }
-        #reqIdBox { background: #f8fafc; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid var(--success); text-align: left; }
-
-        .auth-logo-wrap {
-            width: 76px; height: 76px; margin: 0 auto 16px; border-radius: 18px;
-            display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(145deg, #f8fafc, #eef2f7);
-            box-shadow: inset 0 0 0 1px #eef1f5, 0 8px 20px -8px rgba(30,58,138,0.18);
-        }
-        .auth-logo-wrap img { width: 52px; height: 52px; object-fit: contain; }
-        .auth-org-name { margin: 0 0 4px; color: #0f172a; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.01em; }
-        .auth-org-sub { color: #64748b; font-size: 0.85rem; margin: 0 0 8px; font-weight: 500; }
-        .auth-tool-tag {
-            display: inline-flex; align-items: center; gap: 7px;
-            color: var(--primary); font-size: 0.78rem; font-weight: 600;
-            background: #eff6ff; border: 1px solid #dbeafe; border-radius: 20px;
-            padding: 5px 14px; margin-bottom: 26px;
-        }
-        #signInStatus { color: #64748b; font-size: 0.85rem; margin-bottom: 10px; min-height: 20px; }
-
-        .auth-ip-box {
-            background: #f8fafc; border: 1px solid #e7eaf0; border-radius: 12px;
-            padding: 11px 15px; margin-bottom: 18px; font-size: 0.78rem;
-            font-family: 'SF Mono', monospace; text-align: left;
-        }
-        .auth-ip-box .auth-ip-title { color: #94a3b8; margin-bottom: 5px; font-weight: 600; letter-spacing: 0.02em; }
-        .auth-ip-box .auth-ip-title i { color: #94a3b8; margin-right: 5px; }
-        #ipStatusLine { color: #d97706; font-weight: 600; }
-        #ipStatusLine i { margin-right: 4px; }
-
-        .auth-field-wrap { margin-bottom: 18px; text-align: left; }
-        .auth-field-label {
-            color: #475569; font-size: 0.78rem; font-weight: 700; display: block;
-            margin-bottom: 7px; letter-spacing: 0.04em; text-transform: uppercase;
-        }
-        .auth-field-label i { color: var(--accent); margin-right: 6px; width: 14px; text-align: center; }
-        .auth-field-error {
-            color: #dc2626; font-size: 0.78rem; margin-top: 7px; display: none;
-            line-height: 1.4;
-        }
-        .auth-field-error i { margin-right: 5px; }
-        .auth-context-line {
-            background: #eff6ff; border: 1px solid #dbeafe; border-radius: 9px;
-            padding: 8px 12px; margin-bottom: 12px; font-size: 0.75rem; color: var(--primary);
-            font-family: 'SF Mono', monospace; display: none; font-weight: 600;
-        }
-        .auth-use-empid {
-            color: var(--accent); font-size: 0.75rem; font-weight: 600;
-            text-decoration: none; cursor: pointer; border-bottom: 1px dashed transparent;
-            transition: border-color .15s;
-        }
-        .auth-use-empid:hover { border-bottom-color: var(--accent); }
-
-        .auth-ms-btn {
-            width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #e2e8f0; cursor: pointer;
-            background: #ffffff; color: #1e293b; font-size: 0.95rem; font-weight: 600;
-            display: flex; align-items: center; justify-content: center; gap: 12px;
-            box-shadow: 0 1px 2px rgba(15,23,42,0.04); transition: background .15s, box-shadow .15s, transform .15s;
-        }
-        .auth-ms-btn:hover { background: #f8fafc; box-shadow: 0 4px 14px rgba(15,23,42,0.08); transform: translateY(-1px); }
-        .auth-ms-btn:active { transform: translateY(0); }
-        .auth-ms-btn:disabled { opacity: 0.7; cursor: default; transform: none; }
-
-        .auth-footer-note { color: #94a3b8; font-size: 0.75rem; margin-top: 22px; line-height: 1.6; }
-        .auth-footer-note i { color: var(--accent); }
-        #signInError {
-            color: #dc2626; font-size: 0.82rem; margin-top: 16px; display: none;
-            white-space: pre-line; line-height: 1.55; text-align: left;
-            background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 11px 13px;
-        }
-
+        /* ── AUTH OVERLAY ── */
+        #authOverlay { position: fixed; inset: 0; background: #0f172a; display: flex; justify-content: center; align-items: center; z-index: 20000; color: white; }
+        .auth-box { background: #1e293b; padding: 40px; border-radius: 20px; border: 1px solid #334155; max-width: 460px; width: 90%; text-align: center; }
+        .auth-box input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: white; text-align: center; font-size: 1rem; }
+        .auth-box input:focus { outline: none; border-color: var(--accent); }
+        .loader-text { font-size: 0.8rem; color: #fbbf24; margin-top: 10px; display: none; }
+        #ipLabel { color: var(--accent); font-weight: bold; margin-bottom: 15px; display: block; font-family: monospace; font-size: 0.85rem; }
+        #reqIdBox { background: #0f172a; padding: 15px; border-radius: 10px; margin: 20px 0; border: 1px solid var(--success); text-align: left; }
 
         /* ── LOGIN OVERLAY ── */
         #loginOverlay { position: fixed; inset: 0; background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
@@ -148,22 +51,11 @@
         #loginEmpIdDisplay { background: #f1f5f9; border-radius: 8px; padding: 8px 14px; font-size: 0.85rem; color: #475569; margin-bottom: 10px; font-family: monospace; font-weight: bold; }
 
         /* ── SECURE MODAL (password entry) ── */
-        #secureModal { display: none; position: fixed; inset: 0; background: rgba(8,12,30,0.78); backdrop-filter: blur(6px); z-index: 25000; justify-content: center; align-items: center; padding: 20px; }
-        .modal-content {
-            background: white; padding: 28px 28px 24px; border-radius: 20px; width: 100%; max-width: 400px;
-            text-align: center; position: relative; color: var(--text);
-            box-shadow: 0 8px 16px -8px rgba(15,23,42,0.15), 0 30px 60px -20px rgba(15,23,42,0.5);
-            animation: guPop .25s cubic-bezier(.34,1.56,.64,1);
-        }
-        .modal-content h3 { font-size: 1.05rem; font-weight: 700; color: #0f172a; }
-        .modal-content input {
-            width: 100%; padding: 12px 14px; margin: 15px 0; border: 1.5px solid #e2e8f0;
-            border-radius: 10px; font-size: 0.95rem; outline: none; background: #f8fafc;
-            box-sizing: border-box; transition: border-color .15s, background .15s, box-shadow .15s;
-        }
-        .modal-content input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
-        .it-note { font-size: 11.5px; color: #94a3b8; margin-top: 15px; font-style: normal; border-top: 1px solid #f1f5f9; padding-top: 12px; }
-        .it-note i { color: #ef4444; }
+        #secureModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 25000; justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; text-align: center; position: relative; color: var(--text); }
+        .modal-content input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; outline: none; }
+        .modal-content input:focus { border-color: var(--accent); }
+        .it-note { font-size: 11px; color: #ef4444; margin-top: 15px; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 10px; }
 
         /* ── CUSTOM ALERT / CONFIRM DIALOG ── */
         #guDialog {
@@ -443,54 +335,64 @@
 <!-- ══════════════════════════════════════════
      SIGN-IN OVERLAY  (Microsoft 365 Login)
 ═══════════════════════════════════════════ -->
-<div id="authOverlay">
-    <div class="auth-box">
-        <div class="auth-logo-wrap">
-            <img src="data:image/jpeg;base64,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" alt="Godavari Urban">
-        </div>
-        <h2 class="auth-org-name">Godavari Urban</h2>
-        <p class="auth-org-sub">Multi-State Credit Co-Op Society Ltd.</p>
-        <div class="auth-tool-tag">
+<div id="authOverlay" style="display:flex; position:fixed; inset:0; background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%); justify-content:center; align-items:center; z-index:20000;">
+    <div class="auth-box" style="text-align:center; max-width:440px; width:90%;">
+        <img src="data:image/jpeg;base64,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" style="width:72px;height:72px;object-fit:contain;margin-bottom:16px;filter:drop-shadow(0 4px 12px rgba(59,130,246,0.4));">
+        <h2 style="margin:0 0 4px 0; color:#fff;">Godavari Urban</h2>
+        <p style="color:#94a3b8; font-size:0.85rem; margin:0 0 6px 0;">Multi-State Credit Co-Op Society Ltd.</p>
+        <div style="color:#93c5fd; font-size:0.8rem; margin-bottom:24px;">
             <i class="fas fa-file-signature"></i> Internal Branch Document Authorization Tool
         </div>
 
-        <div id="signInStatus"></div>
+        <div id="signInStatus" style="color:#94a3b8; font-size:0.85rem; margin-bottom:10px; min-height:20px;"></div>
 
         <!-- IP Detection Status -->
-        <div id="ipVerifyBox" class="auth-ip-box">
-            <div class="auth-ip-title"><i class="fas fa-network-wired"></i>Network IP Detection</div>
-            <div id="ipStatusLine"><i class="fas fa-spinner fa-spin"></i> Detecting your network IP...</div>
+        <div id="ipVerifyBox" style="background:#0f172a; border:1px solid #334155; border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:0.78rem; font-family:monospace; text-align:left;">
+            <div style="color:#64748b; margin-bottom:4px;"><i class="fas fa-network-wired"></i> Network IP Detection</div>
+            <div id="ipStatusLine" style="color:#fbbf24;"><i class="fas fa-spinner fa-spin"></i> Detecting your network IP...</div>
         </div>
 
         <!-- Employee ID Field (only shown before IT has authorized this workstation) -->
-        <div id="empIdFieldWrap" class="auth-field-wrap">
-            <label class="auth-field-label">
-                <i class="fas fa-id-badge"></i>Employee ID
+        <div id="empIdFieldWrap" style="margin-bottom:16px; text-align:left;">
+            <label style="color:#94a3b8; font-size:0.78rem; font-weight:600; display:block; margin-bottom:6px; letter-spacing:0.05em;">
+                <i class="fas fa-id-badge" style="color:#3b82f6; margin-right:6px;"></i>EMPLOYEE ID
             </label>
             <input id="loginEmpId" type="text" placeholder="e.g. GU-0570"
+                style="width:100%; padding:12px 14px; border-radius:8px; border:1px solid #334155;
+                background:#0f172a; color:#fff; font-size:0.95rem; font-family:monospace;
+                outline:none; letter-spacing:0.05em; box-sizing:border-box;"
+                onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'"
                 onkeydown="if(event.key==='Enter') document.getElementById('msSignInBtn').click()">
-            <div id="empIdError" class="auth-field-error">
+            <div id="empIdError" style="color:#f87171; font-size:0.78rem; margin-top:6px; display:none;">
                 <i class="fas fa-exclamation-circle"></i> <span id="empIdErrorMsg"></span>
             </div>
         </div>
 
         <!-- Password Field (shown instead of Employee ID once IT has authorized this workstation) -->
-        <div id="passwordFieldWrap" class="auth-field-wrap" style="display:none;">
-            <div id="loginContextDisplay" class="auth-context-line"></div>
-            <label class="auth-field-label">
-                <i class="fas fa-key"></i>Password
+        <div id="passwordFieldWrap" style="margin-bottom:16px; text-align:left; display:none;">
+            <div id="loginContextDisplay" style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px 12px; margin-bottom:10px; font-size:0.75rem; color:#93c5fd; font-family:monospace; display:none;"></div>
+            <label style="color:#94a3b8; font-size:0.78rem; font-weight:600; display:block; margin-bottom:6px; letter-spacing:0.05em;">
+                <i class="fas fa-key" style="color:#3b82f6; margin-right:6px;"></i>PASSWORD
             </label>
             <input id="loginPassword" type="password" placeholder="Enter your password"
+                style="width:100%; padding:12px 14px; border-radius:8px; border:1px solid #334155;
+                background:#0f172a; color:#fff; font-size:0.95rem; font-family:monospace;
+                outline:none; letter-spacing:0.05em; box-sizing:border-box;"
+                onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'"
                 onkeydown="if(event.key==='Enter') document.getElementById('msSignInBtn').click()">
-            <div id="passwordError" class="auth-field-error">
+            <div id="passwordError" style="color:#f87171; font-size:0.78rem; margin-top:6px; display:none;">
                 <i class="fas fa-exclamation-circle"></i> <span id="passwordErrorMsg"></span>
             </div>
-            <div style="text-align:right; margin-top:9px;">
-                <span class="auth-use-empid" onclick="switchToEmpIdMode()">Use Employee ID instead</span>
+            <div style="text-align:right; margin-top:8px;">
+                <span onclick="switchToEmpIdMode()" style="color:#64748b; font-size:0.72rem; text-decoration:underline; cursor:pointer;">Use Employee ID instead</span>
             </div>
         </div>
 
-        <button id="msSignInBtn" class="auth-ms-btn" onclick="startMsLogin()">
+        <button id="msSignInBtn" onclick="startMsLogin()" style="
+            width:100%; padding:14px; border-radius:10px; border:none; cursor:pointer;
+            background:#fff; color:#1e293b; font-size:1rem; font-weight:600;
+            display:flex; align-items:center; justify-content:center; gap:12px;
+            box-shadow:0 2px 8px rgba(0,0,0,0.25); transition:background 0.2s;">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 21 21">
                 <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
                 <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
@@ -500,10 +402,10 @@
             Sign in with Microsoft 365
         </button>
 
-        <div id="signInError"></div>
-        <p class="auth-footer-note">
+        <div id="signInError" style="color:#f87171; font-size:0.85rem; margin-top:14px; display:none; white-space:pre-line; line-height:1.5;"></div>
+        <p style="color:#475569; font-size:0.75rem; margin-top:20px; line-height:1.6;">
             Use your Godavari Urban Microsoft 365 work account.<br>
-            <i class="fas fa-lock"></i> Secure — no passwords stored in this app.
+            <i class="fas fa-lock" style="color:#3b82f6;"></i> Secure — no passwords stored in this app.
         </p>
     </div>
 </div>
