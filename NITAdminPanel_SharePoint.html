@@ -3390,7 +3390,7 @@ const CLIENT_ID            = "106f2386-db75-436c-8e08-21c2ea14958e";   // ✅ Az
 const TENANT_ID            = "e47e4128-1c1b-4510-a440-415145dc1cde";   // ✅ Azure Tenant ID
 const SHAREPOINT_HOST      = "godavariurban.sharepoint.com";             // ✅ SharePoint host
 const SHAREPOINT_SITE_NAME = "GUMCCSLFDCOMMISTION";                      // ✅ SharePoint site name
-const BRANCH_APP_URL       = "https://godavar-urban.github.io/godavariurban-portal/DigitalSigner_SharePoint.html"; // ✅ Branch app GitHub Pages URL
+const BRANCH_APP_URL       = "https://godavari-urban.github.io/godavariurban-portal/DigitalSigner_SharePoint.html"; // ✅ Branch app GitHub Pages URL
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Derived constants (do not edit)
@@ -3400,13 +3400,13 @@ const SP_SITE_PATH = `/sites/${SHAREPOINT_HOST}:/sites/${SHAREPOINT_SITE_NAME}`;
 // ── MSAL Configuration
 // For popup flows in MSAL v3, use the page's own URL as redirectUri.
 // The popup closes itself after auth — it never fully reloads the app.
-const _blankRedirectUri = "https://godavar-urban.github.io/godavariurban-portal/redirect.html";
+const _blankRedirectUri = "https://godavari-urban.github.io/godavariurban-portal/redirect.html";
 
 const msalConfig = {
     auth: {
         clientId: CLIENT_ID,
         authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-        redirectUri: "https://godavar-urban.github.io/godavariurban-portal/redirect.html",
+        redirectUri: "https://godavari-urban.github.io/godavariurban-portal/redirect.html",
         navigateToLoginRequestUrl: false
     },
     cache: { cacheLocation: "sessionStorage", storeAuthStateInCookie: true },
