@@ -2825,7 +2825,7 @@ Fill the form on the left to preview the registration email that will be sent to
         <div style="font-size:0.8rem; color:var(--muted); line-height:1.9;">
           <div><span style="color:var(--accent)">1.</span> Enter branch name, manager details, IP &amp; branch email</div>
           <div><span style="color:var(--accent)">2.</span> Click "Add Branch" — branch is saved &amp; app email sent automatically</div>
-          <div><span style="color:var(--accent)">3.</span> Branch receives the Internal Branch Document Authorization Tool app (.html) via email</div>
+          <div><span style="color:var(--accent)">3.</span> Branch receives the E-SIGNHUB app (.html) via email</div>
           <div><span style="color:var(--accent)">4.</span> Branch verifies Employee ID and IP, then waits for IT authorization</div>
           <div><span style="color:var(--accent)">5.</span> IT clicks Authorize, then branch proceeds and sets personal password</div>
         </div>
@@ -2975,7 +2975,7 @@ Fill the form on the left to preview the registration email that will be sent to
             Branch,EmpID,EmpName,Post,AllowedIP,BranchEmail
           </div>
           <p style="font-size:0.75rem; color:var(--muted); margin-top:10px;">
-            <i class="fas fa-info-circle"></i> Each branch will receive only the Internal Branch Document Authorization Tool app (.html). The activation key stays with IT, and the branch must verify Employee ID and IP before IT authorizes the workstation. PassHash and FirstLogin are set automatically.
+            <i class="fas fa-info-circle"></i> Each branch will receive only the E-SIGNHUB app (.html). The activation key stays with IT, and the branch must verify Employee ID and IP before IT authorizes the workstation. PassHash and FirstLogin are set automatically.
           </p>
           <select id="bulk_actkey_preset" style="display:none;"><option value=""></option></select>
           <input type="hidden" id="bulk_acthash_display">
@@ -3060,7 +3060,7 @@ Fill the form on the left to preview the registration email that will be sent to
 
   <div class="page" id="page-tools">
     <div class="section-header">
-      <div class="section-title">IT Tools <span>Utilities for managing the Internal Branch Document Authorization Tool system</span></div>
+      <div class="section-title">IT Tools <span>Utilities for managing the E-SIGNHUB system</span></div>
     </div>
 
     <!-- ── CATEGORY LABEL: PASSWORD RESET REQUESTS (TOP) ── -->
@@ -3264,7 +3264,7 @@ Fill the form on the left to preview the registration email that will be sent to
 
 <script>
 // ═══════════════════════════════════════════════════════════
-//  CONFIG — same script URL as Internal Branch Document Authorization Tool HTML
+//  CONFIG — same script URL as E-SIGNHUB HTML
 // ═══════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ██████╗ ██████╗ ███████╗     ███╗   ███╗ █████╗ ██████╗
@@ -3512,7 +3512,9 @@ async function getListId(listName) {
 // WRITE (POST/PATCH fields) requires internal names — mapped below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SP_TITLE_LISTS = ["GU_Branches", "GU_ManagerHist", "GU_PwdResetRequests"];
+const SP_TITLE_LISTS = ["GU_Branches", "GU_ManagerHist"];
+// GU_PwdResetRequests: Title holds EmpID (not Branch), so it must NOT be in SP_TITLE_LISTS
+// — the Title→Branch auto-mapping would overwrite the real Branch column with EmpID.
 
 // ── Hardcoded write maps using actual SharePoint internal field names ──────────
 // Internal names confirmed from /columns API response (field_N = creation order).
@@ -3894,12 +3896,12 @@ async function callScript(payload) {
                         content: `<div style="font-family:Arial,sans-serif;color:#1e293b;max-width:520px;">
 <div style="background:#1e3a8a;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
   <strong style="font-size:1.1rem;">Godavari Urban Multi-State Credit Co-Op Society</strong><br>
-  <span style="font-size:0.85rem;opacity:0.85;">Internal Branch Document Authorization Tool</span>
+  <span style="font-size:0.85rem;opacity:0.85;">E-SIGNHUB</span>
 </div>
 <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
   <p>Dear <strong>${empName}</strong>,</p>
   <p>Your workstation at <strong>${branch}</strong> branch has been registered on the
-  Godavari Urban Internal Branch Document Authorization System.</p>
+  Godavari Urban E-SIGNHUB.</p>
   <table style="background:#f1f5f9;border-radius:6px;padding:14px 18px;width:100%;border-collapse:collapse;margin:16px 0;">
     <tr><td style="padding:4px 0;color:#64748b;width:140px;">Employee ID</td><td style="padding:4px 0;font-weight:bold;">${empId}</td></tr>
     <tr><td style="padding:4px 0;color:#64748b;">Post</td><td style="padding:4px 0;">${post}</td></tr>
@@ -4140,6 +4142,7 @@ let pendingConfirmCb = null;
 let pendingConfirmRequiresPassword = false;
 let dataLoadPromise = null;
 let autoRefreshTimer = null;
+let pwdRefreshTimer  = null;
 const AUTO_REFRESH_MS = 60000;
 
 // ═══════════════════════════════════════════════════════════
@@ -4241,13 +4244,21 @@ function startAutoRefresh() {
     autoRefreshTimer = setInterval(() => {
         if (!sessionStorage.getItem("adminHash") || dataLoadPromise) return;
         loadAllData(true);
-        loadPwdResetRequests(); // keep badge count current
     }, AUTO_REFRESH_MS);
+
+    // Poll password reset requests every 20 s independently (urgent, lightweight)
+    clearInterval(pwdRefreshTimer);
+    pwdRefreshTimer = setInterval(() => {
+        if (!sessionStorage.getItem("adminHash")) return;
+        loadPwdResetRequests();
+    }, 20000);
 }
 
 function stopAutoRefresh() {
     clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
+    clearInterval(pwdRefreshTimer);
+    pwdRefreshTimer = null;
 }
 
 function confirmDialog(title, desc, onOk, okText = "Confirm", requirePassword = false) {
@@ -4323,7 +4334,7 @@ async function loadPwdResetRequests() {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
     try {
         const items = await spReadAll("GU_PwdResetRequests");
-        const pending = items.filter(i => (i.Status || "").toString().toUpperCase() !== "DONE");
+        const pending = items.filter(i => !["DONE","DISMISSED"].includes((i.Status || "").toString().toUpperCase()));
 
         // Update sidebar notification badge
         const badge = document.getElementById("pwdResetBadge");
@@ -4359,7 +4370,7 @@ async function loadPwdResetRequests() {
             branch  = branch  || "—";
 
             const reason = req.Reason || "No reason provided";
-            const reqAt  = req.RequestedAt ? new Date(req.RequestedAt).toLocaleString("en-IN") : "—";
+            const reqAt  = req.RequestedAt ? formatDate(req.RequestedAt) : "—";
             const spId   = req._spId;
             const safeBranch = branch.replace(/'/g, "\\'");
             const safeEmpId  = empId.replace(/'/g, "\\'");
@@ -4386,7 +4397,7 @@ async function loadPwdResetRequests() {
                     <i class="fas fa-redo"></i> Reset Login
                   </button>
                   <button class="btn btn-outline" style="font-size:0.8rem;padding:9px 14px;"
-                    onclick="dismissPwdResetRequest('${spId}', this)">
+                    onclick="dismissPwdResetRequest('${spId}', '${safeBranch}', '${safeEmpId}', this)">
                     <i class="fas fa-times"></i> Dismiss
                   </button>
                 </div>
@@ -4413,6 +4424,13 @@ async function processPwdReset(spId, branch, empId, btn) {
         });
         // Mark request as done
         await spUpdateItem("GU_PwdResetRequests", spId, { Status: "DONE" });
+        // ── Audit trail: log this action to GU_BranchJourney
+        await logJourney(
+            branchItem.Branch, empId, branchItem.EmpName, branchItem.Post, branchItem.AllowedIP,
+            "PENDING_FILE_SEND", "PASSWORD_RESET",
+            "Branch manager password reset by IT Admin. Manager must set a new password on next login.",
+            "IT Admin"
+        );
         toast(`✅ Login reset for ${branch}. Manager must set a new password on next login.`, "success");
         loadPwdResetRequests();
     } catch(e) {
@@ -4422,12 +4440,34 @@ async function processPwdReset(spId, branch, empId, btn) {
     }
 }
 
-async function dismissPwdResetRequest(spId, btn) {
+async function dismissPwdResetRequest(spId, branch, empId, btn) {
+    // Ask IT for a dismiss remark before closing
+    const remark = prompt(`Dismiss password reset request for ${empId} (${branch})?\n\nEnter a reason for dismissal (required):`);
+    if (remark === null) return; // cancelled
+    if (!remark.trim()) {
+        toast("⚠️ Dismiss reason is required.", "error");
+        return;
+    }
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner spin"></i>';
     try {
-        await spUpdateItem("GU_PwdResetRequests", spId, { Status: "DONE" });
+        await spUpdateItem("GU_PwdResetRequests", spId, {
+            Status: "DISMISSED",
+            Reason: remark.trim()   // overwrite Reason with dismiss remark for audit visibility
+        });
+        // ── Audit trail: log dismissal to GU_BranchJourney
+        try {
+            const branchItem = await spFindItem("GU_Branches", "EmpID", empId);
+            if (branchItem) {
+                await logJourney(
+                    branchItem.Branch, empId, branchItem.EmpName, branchItem.Post, branchItem.AllowedIP,
+                    branchItem.WorkstationStatus || "UNKNOWN", "PWD_RESET_DISMISSED",
+                    `IT dismissed password reset request. Reason: ${remark.trim()}`,
+                    "IT Admin"
+                );
+            }
+        } catch(e) { /* non-fatal — SP record already updated */ }
         toast("Request dismissed.", "success");
         loadPwdResetRequests();
     } catch(e) {
@@ -5095,7 +5135,7 @@ async function sendAppEmailByIdx(idx) {
 
     confirmDialog(
         "Send App Email",
-        `Send Internal Branch Authorization Tool app file to ${b.BranchEmail} for ${b.Branch} (${b.EmpID})?`,
+        `Send E-SIGNHUB app file to ${b.BranchEmail} for ${b.Branch} (${b.EmpID})?`,
         async () => {
             try {
                 const res = await callScript({
@@ -5123,7 +5163,12 @@ function formatDate(value) {
     if (!value) return "—";
     const d = new Date(value);
     if (isNaN(d.getTime())) return String(value);
-    return d.toLocaleString();
+    const dd = String(d.getDate()).padStart(2,"0");
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2,"0");
+    const min = String(d.getMinutes()).padStart(2,"0");
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 }
 
 function getJourneyRows() {
@@ -5668,7 +5713,7 @@ BRANCH: ${b}
 ─────────────────────────────
 Dear ${n},
 
-Your workstation at ${b} branch has been registered on the Godavari Urban Internal Branch Document Authorization Tool system.
+Your workstation at ${b} branch has been registered on the Godavari Urban E-SIGNHUB system.
 
 DETAILS:
   Employee ID   : ${e}
