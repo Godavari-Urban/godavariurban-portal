@@ -3637,13 +3637,17 @@ async function spFieldsToSP(listName, fields) {
     const mapped = {};
     for (const [key, val] of Object.entries(fields)) {
         const spName = writeMap[key] || key;
-        // UPDATED for new IT-owned site (GU-DigitalSigner-IT), based on confirmed
-        // column types from List Settings:
-        //   SignatureRevoked, FirstLogin, Activated → real Yes/No columns
-        //     → send native JS booleans (what Graph expects for Yes/No fields)
-        //   ActivationReset → Single line of TEXT column (not Yes/No!)
-        //     → must send a string, or Graph rejects it with generalException
-        if (typeof val === "boolean" && key === "ActivationReset") {
+        // UPDATED — column types differ by LIST, even for fields with the same name:
+        //   On GU_Branches: SignatureRevoked, FirstLogin, Activated → real Yes/No
+        //     → send native JS booleans
+        //   On GU_ManagerHist: SignatureRevoked, ActivationReset → Single line of TEXT
+        //     (confirmed via List Settings) → must send a string, not a boolean,
+        //     or Graph rejects it with generalException
+        //   ActivationReset is ALWAYS text on every list that has it → always string
+        const textBooleanFields = (listName === "GU_ManagerHist")
+            ? ["SignatureRevoked", "ActivationReset"]
+            : ["ActivationReset"];
+        if (typeof val === "boolean" && textBooleanFields.includes(key)) {
             mapped[spName] = val ? "1" : "0";
         } else {
             mapped[spName] = val;
