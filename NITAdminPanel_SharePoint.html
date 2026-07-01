@@ -3448,11 +3448,11 @@ async function getToken(scopeOverride) {
 //    off 1s → 2s → 4s. After MAX_GRAPH_RETRIES attempts it gives up and
 //    throws, same as before — callers' existing try/catch still works.
 const MAX_GRAPH_RETRIES = 4;
-async function graphRequest(method, endpoint, body = null, _attempt = 0) {
+async function graphRequest(method, endpoint, body = null, _attempt = 0, extraHeaders = {}) {
     const token = await getToken();
     const opts = {
         method,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...extraHeaders }
     };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(GRAPH + endpoint, opts);
@@ -3462,7 +3462,7 @@ async function graphRequest(method, endpoint, body = null, _attempt = 0) {
             const retryAfterHeader = parseInt(res.headers.get("Retry-After"), 10);
             const waitMs = !isNaN(retryAfterHeader) ? retryAfterHeader * 1000 : Math.pow(2, _attempt) * 1000;
             await new Promise(r => setTimeout(r, waitMs));
-            return graphRequest(method, endpoint, body, _attempt + 1);
+            return graphRequest(method, endpoint, body, _attempt + 1, extraHeaders);
         }
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error?.message || `Graph API error ${res.status}`);
@@ -3521,7 +3521,9 @@ async function getListId(listName) {
 // WRITE (POST/PATCH fields) requires internal names — mapped below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SP_TITLE_LISTS = ["GU_Branches", "GU_ManagerHist"];
+const SP_TITLE_LISTS = ["GU_Branches"];
+// GU_ManagerHist: Title actually holds Timestamp (confirmed via column-formatting
+// [$Title] token), NOT Branch — handled by its own specific mapping below instead.
 // GU_PwdResetRequests: Title holds EmpID (not Branch), so it must NOT be in SP_TITLE_LISTS
 // — the Title→Branch auto-mapping would overwrite the real Branch column with EmpID.
 
@@ -3582,9 +3584,12 @@ const SP_WRITE_MAP_BRANCHJOURNEY = {
     "ChangedBy": "ChangedBy"
 };
 
+// FIXED: confirmed via column-formatting [$Title] token that GU_ManagerHist's
+// Title actually holds the Timestamp, not the Branch (same issue as BranchJourney).
 const SP_WRITE_MAP_MANAGERHIST = {
-    "Branch":     "Title"
-    // All other fields passed by display name (Timestamp, OldEmpID, Action, etc.)
+    "Timestamp":  "Title",
+    "Branch":     "Branch"
+    // All other fields passed by display name (OldEmpID, Action, etc.)
 };
 
 // GU_Admins: Email is field_1, Password is field_2 (custom columns after Title)
@@ -3688,6 +3693,11 @@ function spFieldsFromSP(listName, fields) {
         mapped.Timestamp = mapped.Title;
         delete mapped.Title;
     }
+    // GU_ManagerHist stores Timestamp in the Title column
+    if (listName === "GU_ManagerHist" && mapped.hasOwnProperty("Title")) {
+        mapped.Timestamp = mapped.Title;
+        delete mapped.Title;
+    }
     // GU_SignedDocs stores EventID in the Title column
     if (listName === "GU_SignedDocs" && mapped.hasOwnProperty("Title")) {
         mapped.EventID = mapped.Title;
@@ -3749,7 +3759,10 @@ async function spFindItem(listName, fieldName, value) {
             const siteId = await getSiteId();
             const listId = await getListId(listName);
             const url = `/sites/${siteId}/lists/${listId}/items?$expand=fields&$filter=fields/${internalName} eq '${safeValue}'&$top=1`;
-            const data = await graphRequest("GET", url);
+            // Graph rejects $filter on non-indexed columns (like EmpID) unless this
+            // header is sent — error was: "Field 'EmpID' cannot be referenced in
+            // filter... not indexed." This tells Graph to allow it anyway.
+            const data = await graphRequest("GET", url, null, 0, { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" });
             if (data.value && data.value.length > 0) {
                 return { _spId: data.value[0].id, ...spFieldsFromSP(listName, data.value[0].fields) };
             }
