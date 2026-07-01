@@ -3248,6 +3248,15 @@ Fill the form on the left to preview the registration email that will be sent to
       <div style="border-top:1px dashed rgba(234,88,12,0.3);margin:18px 0 14px;padding-top:14px;">
         <div style="font-size:0.72rem;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;"><i class="fas fa-user-plus"></i> &nbsp;Assign Replacement Manager (Optional)</div>
         <div class="form-grid">
+          <div class="form-group full">
+            <label>Replacement Manager</label>
+            <select id="mc_new_select" onchange="onReplacementSelectChange()" style="padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.9rem;font-family:'IBM Plex Sans',sans-serif;width:100%;">
+              <option value="">— No replacement (leave branch vacant) —</option>
+            </select>
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:6px;">Pick someone already in the organization, or choose "Add a brand-new manager" to type in a new person.</div>
+          </div>
+        </div>
+        <div class="form-grid" id="mc_new_manual_group" style="display:none;margin-top:10px;">
           <div class="form-group">
             <label>New Manager EmpID</label>
             <input type="text" id="mc_new_empid" placeholder="e.g. GU-0899">
@@ -6320,6 +6329,86 @@ function buildToolBranchOptions() {
     syncToolEmpId("rl");
     syncToolEmpId("mc");
     syncTransferSource();
+    buildManagerBenchOptions();
+}
+
+// ── Build the list of "available managers" for the Replacement Manager dropdown.
+//    Source: GU_ManagerHist — anyone who was deactivated (appears as OldEmpID)
+//    and is NOT currently the active EmpID on any branch right now.
+//    (We only have manager history to work with for now; a proper employee
+//    master list can replace this source later without touching the UI.)
+function computeManagerBench() {
+    const activeEmpIds = new Set(
+        allBranches.map(b => String(b.EmpID || "").trim().toUpperCase()).filter(Boolean)
+    );
+    const latestByEmpId = {};
+    (managerHistory || []).forEach(h => {
+        const empId = String(h.OldEmpID || "").trim().toUpperCase();
+        if (!empId) return;
+        const ts = String(h.Timestamp || "");
+        if (!latestByEmpId[empId] || ts > latestByEmpId[empId]._ts) {
+            latestByEmpId[empId] = {
+                EmpID: empId,
+                EmpName: h.OldEmpName || "",
+                Post: h.OldPost || "",
+                _ts: ts
+            };
+        }
+    });
+    return Object.values(latestByEmpId)
+        .filter(m => !activeEmpIds.has(m.EmpID))
+        .sort((a, b) => String(a.EmpName || "").localeCompare(String(b.EmpName || "")));
+}
+
+let _managerBench = [];
+function buildManagerBenchOptions() {
+    _managerBench = computeManagerBench();
+    const sel = document.getElementById("mc_new_select");
+    if (!sel) return;
+    const prevVal = sel.value;
+    const benchOptions = _managerBench.map(m =>
+        `<option value="${esc(m.EmpID)}">${esc(m.EmpName || m.EmpID)} — ${esc(m.EmpID)}${m.Post ? " (" + esc(m.Post) + ")" : ""}</option>`
+    ).join("");
+    sel.innerHTML =
+        `<option value="">— No replacement (leave branch vacant) —</option>` +
+        (benchOptions
+            ? `<optgroup label="Available managers (not currently active)">${benchOptions}</optgroup>`
+            : "") +
+        `<option value="__NEW__">+ Add a brand-new manager (manual entry)</option>`;
+    // Restore selection if it still exists after refresh
+    if (prevVal && [...sel.options].some(o => o.value === prevVal)) {
+        sel.value = prevVal;
+    }
+    onReplacementSelectChange();
+}
+
+// ── Handle Replacement Manager dropdown: autofill from bench, or open manual entry
+function onReplacementSelectChange() {
+    const sel = document.getElementById("mc_new_select");
+    const manualGroup = document.getElementById("mc_new_manual_group");
+    const empIdEl = document.getElementById("mc_new_empid");
+    const nameEl  = document.getElementById("mc_new_name");
+    const postEl  = document.getElementById("mc_new_post");
+    if (!sel || !manualGroup || !empIdEl || !nameEl || !postEl) return;
+    const val = sel.value;
+
+    if (val === "__NEW__") {
+        manualGroup.style.display = "";
+        [empIdEl, nameEl, postEl].forEach(el => { el.readOnly = false; el.style.opacity = ""; });
+        empIdEl.value = ""; nameEl.value = ""; postEl.value = "";
+        empIdEl.focus();
+    } else if (val) {
+        const picked = _managerBench.find(m => m.EmpID === val);
+        manualGroup.style.display = "";
+        [empIdEl, nameEl, postEl].forEach(el => { el.readOnly = true; el.style.opacity = "0.85"; });
+        empIdEl.value = picked ? picked.EmpID : val;
+        nameEl.value  = picked ? picked.EmpName : "";
+        postEl.value  = picked ? picked.Post : "";
+    } else {
+        manualGroup.style.display = "none";
+        [empIdEl, nameEl, postEl].forEach(el => { el.readOnly = false; el.style.opacity = ""; });
+        empIdEl.value = ""; nameEl.value = ""; postEl.value = "";
+    }
 }
 
 function syncToolEmpId(prefix) {
@@ -6806,6 +6895,8 @@ async function managerChanged() {
                 document.getElementById("mc_new_empid").value = "";
                 document.getElementById("mc_new_name").value = "";
                 document.getElementById("mc_new_post").value = "";
+                document.getElementById("mc_new_select").value = "";
+                onReplacementSelectChange();
                 loadAllData();
             } catch(e) {
                 toast("Network error", "error");
