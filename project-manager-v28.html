@@ -3252,11 +3252,11 @@ function applyDB(db, silent) {
   if(db.checklist && typeof db.checklist==="object" && !_pendingPush) {
     _checklist = db.checklist; changed=true;
   }
-  if(db.meetings  && typeof db.meetings==="object")  {
+  if(db.meetings  && typeof db.meetings==="object" && !_pendingPush)  {
     _meetings = db.meetings; saveMeetingsToLocal(); changed=true;
   }
-  if(db.notes && typeof db.notes==="object") { _notes = db.notes; changed=true; }
-  if(db.docs  && typeof db.docs==="object")  { _docs  = db.docs;  changed=true; }
+  if(db.notes && typeof db.notes==="object" && !_pendingPush) { _notes = db.notes; changed=true; }
+  if(db.docs  && typeof db.docs==="object" && !_pendingPush)  { _docs  = db.docs;  changed=true; }
   // ▸ Never overwrite naissance if user has unsaved ticks in flight
   if(db.naissance && typeof db.naissance==="object" && !_pendingPush) {
     _nc = db.naissance; saveNCLocal(); changed=true;
@@ -3759,11 +3759,12 @@ async function spPushAll(db) {
   }
   } catch(e) { console.warn("spPushAll: docs failed:", e.message); }
 
-  // Naissance — store clean {date, items} object only
+  // Naissance — store clean {date, items, gantt} object
   try {
   for(const [pid, data] of Object.entries(db.naissance || {})) {
     if(!data || !Array.isArray(data.items)) continue; // skip if corrupt
     const cleanData = { date: data.date, items: data.items };
+    if(data.gantt) cleanData.gantt = data.gantt;
     await spUpsert(SP_CONFIG.lists.naissance, pid, {
       ProjectName:   (db.projects||[]).find(p=>p.id===pid)?.name || pid,
       LastUpdated:   new Date().toISOString(),
@@ -4701,6 +4702,7 @@ async function saveMeeting() {
   const hd = document.getElementById("meeting-hd-"+_meetingPhaseNum);
   if(hd) { const cnt = getMeetingsForPhase(_meetingPID, _meetingPhaseNum).length; hd.innerHTML = "📝 Meeting Log <span class='meeting-count-chip'>" + cnt + "</span>"; }
   showToast("✅ Meeting logged for Phase " + _meetingPhaseNum + "!");
+  _pendingPush = true;
   await pushAll(); // ← sync to SharePoint so all team members see it
 }
 
@@ -5340,6 +5342,7 @@ async function saveNote() {
   const chip = document.getElementById("notes-chip-"+_notesPhaseNum);
   if(chip) chip.textContent = arr.length;
   showToast("✅ Note saved for Phase " + _notesPhaseNum + "!");
+  _pendingPush = true;
   await pushAll();
 }
 
@@ -5429,6 +5432,7 @@ function newDoc() {
   const docs = getDocsForProject(_docsPID);
   docs.push(doc);
   saveDocsForProject(_docsPID, docs);
+  _pendingPush = true;
   _currentDocId = doc.id;
   renderDocsSidebar();
   renderDocsContent();
@@ -5555,6 +5559,7 @@ async function saveDoc(docId) {
   updateDocCountBadge(_docsPID);
   renderDocsSidebar();
   showToast("✅ Document saved — " + doc.title);
+  _pendingPush = true;
   await pushAll();
 }
 
