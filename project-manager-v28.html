@@ -2179,8 +2179,8 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
               <input type="text" id="apUser" placeholder="e.g. ravi (no spaces)">
             </div>
             <div class="form-field">
-              <label>Password *</label>
-              <input type="text" id="apPass" placeholder="Set a password">
+              <label>Password <span style="color:var(--text3);font-weight:400;">(optional — not needed with Microsoft sign-in)</span></label>
+              <input type="text" id="apPass" placeholder="Leave blank if using Microsoft login">
             </div>
             <div class="form-field">
               <label>Email Address <span style="color:var(--text3);font-weight:400;">(optional — password will be emailed)</span></label>
@@ -6116,11 +6116,14 @@ async function pushUsersToSheet(newUserInfo) {
   try {
     for(const person of _people) {
       const email = person.email || person.u || "";
-      await spUpsert(SP_CONFIG.lists.users, email, {
-        DisplayName: person.name || "",
-        Role:        person.role || "team",
-        Email:       email
-      });
+      const fields = {
+        Role:  person.role || "team",
+        Email: email
+      };
+      // Only send DisplayName when we actually have one — never overwrite a
+      // good SharePoint DisplayName with a blank value from a stale local record.
+      if(person.name) fields.DisplayName = person.name;
+      await spUpsert(SP_CONFIG.lists.users, email, fields);
     }
     return true;
   } catch(err) {
@@ -6153,7 +6156,7 @@ async function addPerson() {
   const pass  = document.getElementById("apPass").value.trim();
   const email = document.getElementById("apEmail").value.trim();
   const role  = document.getElementById("apRole").value;
-  if(!rest || !uname || !pass) { showToast("⚠️ Name, username & password are required!"); return; }
+  if(!rest || !uname) { showToast("⚠️ Name & username are required!"); return; }
   if(_people.find(p => p.u === uname)) { showToast("⚠️ Username already exists — choose a different one!"); return; }
   const newPerson = { u: uname, name, p: pass, role, email };
   _people.push(newPerson);
