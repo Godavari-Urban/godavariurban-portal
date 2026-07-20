@@ -3889,23 +3889,31 @@ async function loadUsersFromServer() {
   try {
     const items = await spGetAllItems(SP_CONFIG.lists.users);
     if(items && items.length) {
-      // Preserve any real names already known locally, keyed by email/username,
-      // so a blank DisplayName in SharePoint can never clobber a good local name.
+      // Preserve any real names/usernames already known locally, keyed by
+      // email, so a blank PM_FullName / PM_Username in SharePoint can never
+      // clobber a good local value.
       const priorNames = {};
+      const priorUsernames = {};
       (_people || []).forEach(p => {
         const key = String(p.email || p.u || "").toLowerCase();
         if(key && p.name) priorNames[key] = p.name;
+        // Only remember a username if it's NOT just the email — an email-shaped
+        // 'u' is itself a sign of past corruption, not a good value to keep.
+        if(key && p.u && p.u.toLowerCase() !== key) priorUsernames[key] = p.u;
       });
       USERS.length = 0;
       items.forEach(f => {
-        const u     = String(f.Title || f.Email || "");
         const email = String(f.Email || f.Title || "");
-        const key   = String(email || u).toLowerCase();
+        const key   = String(email || f.Title || "").toLowerCase();
         // NEVER fall back to Title/Email for name — Title is the email (unique
-        // key), not a display name. If SharePoint's DisplayName is blank, keep
+        // key), not a display name. If SharePoint's PM_FullName is blank, keep
         // whatever good name we already have locally rather than overwrite it.
         const spName = String(f.PM_FullName || f.DisplayName || "").trim();
         const name   = spName || priorNames[key] || "";
+        // Same idea for username: prefer SharePoint's PM_Username; otherwise
+        // keep a good local one; only fall back to email/Title as a last resort.
+        const spUser = String(f.PM_Username || "").trim();
+        const u      = spUser || priorUsernames[key] || String(f.Title || email || "");
         USERS.push({
           u, name,
           role: String(f.Role || "team"),
@@ -6186,12 +6194,14 @@ async function repairAllToSharePoint() {
 //  reliable one — add it to your SharePoint view if you haven't already.
 // ════════════════════════════════════════════════════════════════════════════
 async function pushOnePersonToSheet(person) {
-  const email = (person.email || person.u || "").trim();
-  const name  = String(person.name || "").trim().toUpperCase();
+  const email    = (person.email || person.u || "").trim();
+  const name     = String(person.name || "").trim().toUpperCase();
+  const username = String(person.u    || "").trim().toUpperCase();
   const fields = {
     Role:        person.role || "team",
     Email:       email,
-    PM_FullName: name        // reliable field — always sent — never conditionally dropped
+    PM_FullName: name,       // reliable field — always sent — never conditionally dropped
+    PM_Username: username    // reliable field — always sent — never conditionally dropped
     // NOTE: legacy `DisplayName` field is no longer written to — confirmed
     // working replacement is PM_FullName. Safe to delete the DisplayName
     // column in SharePoint whenever you like.
@@ -6200,14 +6210,18 @@ async function pushOnePersonToSheet(person) {
     await spUpsert(SP_CONFIG.lists.users, email, fields);
     return true;
   } catch(err) {
-    // If PM_FullName doesn't exist in SharePoint yet, Graph rejects the WHOLE
-    // request — retry once without it so Email/Role still save, rather than
-    // silently failing the entire record.
-    if(String(err.message || "").includes("PM_FullName")) {
+    // If PM_FullName / PM_Username don't exist in SharePoint yet, Graph
+    // rejects the WHOLE request — retry once without whichever field is
+    // missing so Email/Role still save, rather than silently failing
+    // the entire record.
+    const msg = String(err.message || "");
+    if(msg.includes("PM_FullName") || msg.includes("PM_Username")) {
       try {
-        const { PM_FullName, ...fallbackFields } = fields;
+        const fallbackFields = { ...fields };
+        if(msg.includes("PM_FullName")) delete fallbackFields.PM_FullName;
+        if(msg.includes("PM_Username")) delete fallbackFields.PM_Username;
         await spUpsert(SP_CONFIG.lists.users, email, fallbackFields);
-        console.warn("⚠️ PM_FullName column not found in SharePoint — saved without it.");
+        console.warn("⚠️ PM_FullName/PM_Username column not found in SharePoint — saved without it.");
         return true;
       } catch(err2) {
         console.warn("⚠️ Could not sync user to SharePoint (fallback also failed):", err2);
