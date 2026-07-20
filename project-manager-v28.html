@@ -6191,21 +6191,23 @@ async function pushOnePersonToSheet(person) {
   const fields = {
     Role:        person.role || "team",
     Email:       email,
-    DisplayName: name,       // legacy field — kept for back-compat
     PM_FullName: name        // reliable field — always sent — never conditionally dropped
+    // NOTE: legacy `DisplayName` field is no longer written to — confirmed
+    // working replacement is PM_FullName. Safe to delete the DisplayName
+    // column in SharePoint whenever you like.
   };
   try {
     await spUpsert(SP_CONFIG.lists.users, email, fields);
     return true;
   } catch(err) {
     // If PM_FullName doesn't exist in SharePoint yet, Graph rejects the WHOLE
-    // request — retry once without it so Email/Role/DisplayName still save,
-    // rather than silently failing the entire record.
+    // request — retry once without it so Email/Role still save, rather than
+    // silently failing the entire record.
     if(String(err.message || "").includes("PM_FullName")) {
       try {
         const { PM_FullName, ...fallbackFields } = fields;
         await spUpsert(SP_CONFIG.lists.users, email, fallbackFields);
-        console.warn("⚠️ PM_FullName column not found in SharePoint yet — saved without it. Add the column, see earlier chat instructions.");
+        console.warn("⚠️ PM_FullName column not found in SharePoint — saved without it.");
         return true;
       } catch(err2) {
         console.warn("⚠️ Could not sync user to SharePoint (fallback also failed):", err2);
