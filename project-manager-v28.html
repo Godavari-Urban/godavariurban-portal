@@ -2171,12 +2171,12 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
               </div>
               <div>
                 <label>Full Name *</label>
-                <input type="text" id="apName" placeholder="e.g. Ravi Kumar">
+                <input type="text" id="apName" placeholder="e.g. RAVI KUMAR" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase(); autoFillApUsername();">
               </div>
             </div>
             <div class="form-field">
-              <label>Username *</label>
-              <input type="text" id="apUser" placeholder="e.g. ravi (no spaces)">
+              <label>Username * <span style="color:var(--text3);font-weight:400;">(auto-generated from name — edit if you want a different one)</span></label>
+              <input type="text" id="apUser" placeholder="auto-generated from name" style="text-transform:uppercase;" oninput="onApUserInput(this);">
             </div>
             <div class="form-field">
               <label>Password <span style="color:var(--text3);font-weight:400;">(optional — not needed with Microsoft sign-in)</span></label>
@@ -2225,7 +2225,7 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
         </div>
         <div>
           <label>Full Name *</label>
-          <input type="text" id="euName" placeholder="e.g. Ravi Kumar">
+          <input type="text" id="euName" placeholder="e.g. RAVI KUMAR" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase();">
         </div>
       </div>
       <div class="form-field"><label>Username</label><input type="text" id="euUser" placeholder="username" disabled style="opacity:.6;cursor:not-allowed;background:#f0f2f8;"></div>
@@ -6094,41 +6094,48 @@ async function saveEditUser() {
   renderAdminPanel();
   closeEditUserModal();
   showToast("⏳ Saving changes & syncing to SharePoint…");
-  // Build email notification payload
-  const emailInfo = email ? {
-    name,
-    uname: _people[idx].u,
-    pass: pass || oldPerson.p,
-    email,
-    role,
-    isUpdate: true
-  } : null;
-  const synced2 = await pushUsersToSheet(emailInfo);
+  const synced2 = await pushOnePersonToSheet(_people[idx]);
   if(synced2) showToast(email ? `✅ ${name} updated & notification email sent!` : `✅ ${name} updated & saved to SharePoint!`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  pushUsersToSheet — saves current _people list to SharePoint PM_Users
-//  Called automatically after every Add / Remove in People Manager
+//  pushOnePersonToSheet — creates/updates exactly ONE person in SharePoint
+//  PM_Users (proper single-record CRUD). Called after every Add / Edit in
+//  People Manager. Always sends every field (Title/Email/Role/DisplayName)
+//  together in a single request, so a person can never end up partially
+//  saved (e.g. Email+Role present but DisplayName silently missing) and a
+//  problem with one record can never block or corrupt another record.
 // ════════════════════════════════════════════════════════════════════════════
+async function pushOnePersonToSheet(person) {
+  const email = (person.email || person.u || "").trim();
+  const name  = String(person.name || "").trim().toUpperCase();
+  const fields = {
+    Role:        person.role || "team",
+    Email:       email,
+    DisplayName: name       // always sent — never conditionally dropped
+  };
+  try {
+    await spUpsert(SP_CONFIG.lists.users, email, fields);
+    return true;
+  } catch(err) {
+    console.warn("⚠️ Could not sync user to SharePoint:", err);
+    showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
+    return false;
+  }
+}
+
+// Back-compat wrapper: some older call sites synced the whole _people list.
+// Kept only for safety; normal Add/Edit flows now call pushOnePersonToSheet
+// directly with just the record that actually changed.
 async function pushUsersToSheet(newUserInfo) {
-  // Save users to SharePoint PM_Users list
   try {
     for(const person of _people) {
-      const email = person.email || person.u || "";
-      const fields = {
-        Role:  person.role || "team",
-        Email: email
-      };
-      // Only send DisplayName when we actually have one — never overwrite a
-      // good SharePoint DisplayName with a blank value from a stale local record.
-      if(person.name) fields.DisplayName = person.name;
-      await spUpsert(SP_CONFIG.lists.users, email, fields);
+      const ok = await pushOnePersonToSheet(person);
+      if(!ok) return false;
     }
     return true;
   } catch(err) {
     console.warn("⚠️ Could not sync users to SharePoint:", err);
-    showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
     return false;
   }
 }
@@ -6144,15 +6151,46 @@ function splitNameTitle(fullName) {
   return { title: "", rest: s };
 }
 function composeNameTitle(title, rest) {
-  rest = String(rest || "").trim();
-  return (title ? `${title} ${rest}` : rest).trim();
+  rest = String(rest || "").trim().toUpperCase();
+  return (title ? `${title.toUpperCase()} ${rest}` : rest).trim();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Auto-generate Username from Full Name (Add Person form)
+//  Stays in sync with the Name field until the admin manually edits the
+//  Username field themselves — at that point it stops overwriting their edit.
+// ════════════════════════════════════════════════════════════════════════════
+let _apUserDirty = false;
+
+function generateUsernameFromName(fullName) {
+  const base = String(fullName || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")   // strip punctuation
+    .trim()
+    .replace(/\s+/g, "");          // remove spaces
+  if(!base) return "";
+  let candidate = base, n = 2;
+  while(_people.find(p => p.u === candidate)) { candidate = base + n; n++; }
+  return candidate;
+}
+
+function autoFillApUsername() {
+  if(_apUserDirty) return; // admin already customized it — don't overwrite
+  document.getElementById("apUser").value =
+    generateUsernameFromName(document.getElementById("apName").value);
+}
+
+function onApUserInput(el) {
+  el.value = el.value.toUpperCase().replace(/\s+/g, "");
+  const gen = generateUsernameFromName(document.getElementById("apName").value);
+  _apUserDirty = (el.value !== gen); // treat any deviation as a manual override
 }
 
 async function addPerson() {
   const title = document.getElementById("apTitle").value;
   const rest  = document.getElementById("apName").value.trim();
   const name  = composeNameTitle(title, rest);
-  const uname = document.getElementById("apUser").value.trim().replace(/\s+/g,"");
+  const uname = document.getElementById("apUser").value.trim().replace(/\s+/g,"").toUpperCase();
   const pass  = document.getElementById("apPass").value.trim();
   const email = document.getElementById("apEmail").value.trim();
   const role  = document.getElementById("apRole").value;
@@ -6167,9 +6205,10 @@ async function addPerson() {
   document.getElementById("apUser").value = "";
   document.getElementById("apPass").value = "";
   document.getElementById("apEmail").value = "";
+  _apUserDirty = false;
   renderAdminPanel();
   showToast(`⏳ Adding ${name} & syncing to SharePoint…`);
-  const synced = await pushUsersToSheet(email ? { name, uname, pass, email, role } : null);
+  const synced = await pushOnePersonToSheet(newPerson);
   if(synced) showToast(email ? `✅ ${name} added & welcome email sent!` : `✅ ${name} added & saved to SharePoint!`);
 }
 
