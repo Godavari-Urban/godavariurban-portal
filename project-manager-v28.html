@@ -2137,9 +2137,9 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
         <div class="admin-card">
           <div class="admin-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <span>🧑‍💼 People Directory</span>
-            <span style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="refreshPeopleFromSharePoint()">🔄 Refresh from SharePoint</button>
-              <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="repairAllToSharePoint()">🔧 Repair All → SharePoint</button>
+            <span id="peopleLiveBadge" style="font-size:11px;color:#9aa0b8;display:flex;align-items:center;gap:5px;">
+              <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+              Live — syncs automatically
             </span>
           </div>
           <div class="admin-card-sub">A Project Leader for Project A can be a Team Member for Project B — all from the same pool.</div>
@@ -3449,7 +3449,11 @@ async function spCreateItem(listName, fields) {
 }
 
 // Generic: update item by SharePoint item id
-async function spUpdateItem(listName, spItemId, fields) {
+// "If-Match: *" tells SharePoint to skip the eTag/concurrency check — without
+// it, Graph can reject the write with a 409 "resourceModified" conflict any
+// time the item was touched since it was last read (e.g. by another sync
+// tick), even though nothing is actually wrong with the data being written.
+async function spUpdateItem(listName, spItemId, fields, _retried) {
   const token = await getMsalToken(); // always fresh token
   const siteId = await spSiteId();
   const listId = await spListId(listName);
@@ -3457,7 +3461,11 @@ async function spUpdateItem(listName, spItemId, fields) {
     `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${spItemId}/fields`,
     {
       method: "PATCH",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "If-Match": "*"
+      },
       body: JSON.stringify(fields)
     }
   );
@@ -3466,6 +3474,10 @@ async function spUpdateItem(listName, spItemId, fields) {
     if(r.status === 404) {
       if(_spItemCache[listName]) delete _spItemCache[listName][Object.keys(_spItemCache[listName]).find(k => _spItemCache[listName][k] === spItemId)];
       return;
+    }
+    // One retry on conflict — a fresh request usually clears a transient eTag race
+    if(r.status === 409 && !_retried) {
+      return spUpdateItem(listName, spItemId, fields, true);
     }
     throw new Error("spUpdateItem failed: " + await r.text());
   }
@@ -3838,6 +3850,24 @@ setInterval(keepAlive, 8 * 60 * 1000);   // 8 minutes
 /* ── Background auto-sync every 30 s — keeps all team members in sync ── */
 setInterval(()=>{ if(serverOK && currentUser && _msalUser && document.visibilityState !== 'hidden') syncFromServer(true); }, 30000);
 
+/* ── People list live sync — same 30 s cadence, no manual refresh needed ──
+   Silently pulls PM_Users from SharePoint and re-renders the People Manager
+   panel if it's open, so Name/Role/Email edits made by anyone (including
+   from SharePoint directly) show up here automatically. */
+async function syncPeopleLive() {
+  if(!(serverOK && currentUser && _msalUser && document.visibilityState !== 'hidden')) return;
+  try {
+    await loadUsersFromServer();
+    syncPeopleToUsers();
+    if(document.getElementById("view-admin")?.classList.contains("active")) {
+      renderAdminPanel();
+    }
+  } catch(err) {
+    console.warn("syncPeopleLive failed (will retry next cycle):", err);
+  }
+}
+setInterval(syncPeopleLive, 30000);
+
 // ═══════════════════════════════════════════
 // Load users from SharePoint PM_Users list
 // Called inside afterMsalLogin()
@@ -3859,14 +3889,30 @@ async function loadUsersFromServer() {
   try {
     const items = await spGetAllItems(SP_CONFIG.lists.users);
     if(items && items.length) {
+      // Preserve any real names already known locally, keyed by email/username,
+      // so a blank DisplayName in SharePoint can never clobber a good local name.
+      const priorNames = {};
+      (_people || []).forEach(p => {
+        const key = String(p.email || p.u || "").toLowerCase();
+        if(key && p.name) priorNames[key] = p.name;
+      });
       USERS.length = 0;
-      items.forEach(f => USERS.push({
-        u:    String(f.Title       || f.Email || ""),
-        name: String(f.DisplayName || f.Title || ""),
-        role: String(f.Role        || "team"),
-        email:String(f.Email       || f.Title || ""),
-        p:    ""   // no passwords — MSAL handles auth
-      }));
+      items.forEach(f => {
+        const u     = String(f.Title || f.Email || "");
+        const email = String(f.Email || f.Title || "");
+        const key   = String(email || u).toLowerCase();
+        // NEVER fall back to Title/Email for name — Title is the email (unique
+        // key), not a display name. If SharePoint's DisplayName is blank, keep
+        // whatever good name we already have locally rather than overwrite it.
+        const spName = String(f.DisplayName || "").trim();
+        const name   = spName || priorNames[key] || "";
+        USERS.push({
+          u, name,
+          role: String(f.Role || "team"),
+          email,
+          p: ""   // no passwords — MSAL handles auth
+        });
+      });
       _people = USERS.map(u => ({ ...u }));
       savePeople(_people);
     }
