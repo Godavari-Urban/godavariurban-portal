@@ -3904,7 +3904,7 @@ async function loadUsersFromServer() {
         // NEVER fall back to Title/Email for name — Title is the email (unique
         // key), not a display name. If SharePoint's DisplayName is blank, keep
         // whatever good name we already have locally rather than overwrite it.
-        const spName = String(f.DisplayName || "").trim();
+        const spName = String(f.PM_FullName || f.DisplayName || "").trim();
         const name   = spName || priorNames[key] || "";
         USERS.push({
           u, name,
@@ -6170,12 +6170,20 @@ async function repairAllToSharePoint() {
 // ════════════════════════════════════════════════════════════════════════════
 //  pushOnePersonToSheet — creates/updates exactly ONE person in SharePoint
 //  PM_Users (proper single-record CRUD). Called after every Add / Edit in
-//  People Manager. Writes only to the existing PM_Users columns — Title
-//  (email, used as the unique key), Email, Role, and DisplayName (the
-//  person's Full Name). All fields are always sent together in a single
-//  request, so a person can never end up partially saved (e.g. Email+Role
-//  present but DisplayName silently missing), and a problem with one
-//  record can never block or corrupt another record.
+//  People Manager. Writes Title (email, used as the unique key), Email,
+//  Role, DisplayName, AND PM_FullName (the person's Full Name, written
+//  twice for safety — see note below). All fields are always sent together
+//  in a single request, so a person can never end up partially saved (e.g.
+//  Email+Role present but the name silently missing), and a problem with
+//  one record can never block or corrupt another record.
+//
+//  NOTE: we write to both `DisplayName` and `PM_FullName`. SharePoint keeps
+//  a column's original internal name forever even after it's renamed or
+//  deleted-and-recreated with the same display label — so if `DisplayName`
+//  was ever touched that way, the app could be writing to a hidden/orphaned
+//  field while a *different* column shows as "DisplayName" in your view.
+//  `PM_FullName` is a fresh column with no such history, so it's the
+//  reliable one — add it to your SharePoint view if you haven't already.
 // ════════════════════════════════════════════════════════════════════════════
 async function pushOnePersonToSheet(person) {
   const email = (person.email || person.u || "").trim();
@@ -6183,12 +6191,28 @@ async function pushOnePersonToSheet(person) {
   const fields = {
     Role:        person.role || "team",
     Email:       email,
-    DisplayName: name        // always sent — never conditionally dropped
+    DisplayName: name,       // legacy field — kept for back-compat
+    PM_FullName: name        // reliable field — always sent — never conditionally dropped
   };
   try {
     await spUpsert(SP_CONFIG.lists.users, email, fields);
     return true;
   } catch(err) {
+    // If PM_FullName doesn't exist in SharePoint yet, Graph rejects the WHOLE
+    // request — retry once without it so Email/Role/DisplayName still save,
+    // rather than silently failing the entire record.
+    if(String(err.message || "").includes("PM_FullName")) {
+      try {
+        const { PM_FullName, ...fallbackFields } = fields;
+        await spUpsert(SP_CONFIG.lists.users, email, fallbackFields);
+        console.warn("⚠️ PM_FullName column not found in SharePoint yet — saved without it. Add the column, see earlier chat instructions.");
+        return true;
+      } catch(err2) {
+        console.warn("⚠️ Could not sync user to SharePoint (fallback also failed):", err2);
+        showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
+        return false;
+      }
+    }
     console.warn("⚠️ Could not sync user to SharePoint:", err);
     showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
     return false;
