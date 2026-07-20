@@ -2135,7 +2135,10 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
         </div>
 
         <div class="admin-card">
-          <div class="admin-card-title">🧑‍💼 People Directory</div>
+          <div class="admin-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <span>🧑‍💼 People Directory</span>
+            <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="refreshPeopleFromSharePoint()">🔄 Refresh from SharePoint</button>
+          </div>
           <div class="admin-card-sub">A Project Leader for Project A can be a Team Member for Project B — all from the same pool.</div>
           <div style="overflow-x:auto;">
           <table class="people-table" id="peopleTable">
@@ -3836,6 +3839,19 @@ setInterval(()=>{ if(serverOK && currentUser && _msalUser && document.visibility
 // Load users from SharePoint PM_Users list
 // Called inside afterMsalLogin()
 // ═══════════════════════════════════════════
+async function refreshPeopleFromSharePoint() {
+  showToast("⏳ Refreshing People list from SharePoint…");
+  try {
+    await loadUsersFromServer();
+    syncPeopleToUsers();
+    renderAdminPanel();
+    showToast("✅ People list refreshed from SharePoint!");
+  } catch(err) {
+    console.warn("refreshPeopleFromSharePoint failed:", err);
+    showToast("⚠️ Could not reach SharePoint — showing last known list.");
+  }
+}
+
 async function loadUsersFromServer() {
   try {
     const items = await spGetAllItems(SP_CONFIG.lists.users);
@@ -6087,8 +6103,8 @@ async function saveEditUser() {
     role,
     isUpdate: true
   } : null;
-  await pushUsersToSheet(emailInfo);
-  showToast(email ? `✅ ${name} updated & notification email sent!` : `✅ ${name} updated & saved to SharePoint!`);
+  const synced2 = await pushUsersToSheet(emailInfo);
+  if(synced2) showToast(email ? `✅ ${name} updated & notification email sent!` : `✅ ${name} updated & saved to SharePoint!`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -6106,9 +6122,11 @@ async function pushUsersToSheet(newUserInfo) {
         Email:       email
       });
     }
+    return true;
   } catch(err) {
     console.warn("⚠️ Could not sync users to SharePoint:", err);
-    showToast("⚠️ Saved locally — SharePoint sync failed. Try again.");
+    showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
+    return false;
   }
 }
 
@@ -6148,8 +6166,8 @@ async function addPerson() {
   document.getElementById("apEmail").value = "";
   renderAdminPanel();
   showToast(`⏳ Adding ${name} & syncing to SharePoint…`);
-  await pushUsersToSheet(email ? { name, uname, pass, email, role } : null);
-  showToast(email ? `✅ ${name} added & welcome email sent!` : `✅ ${name} added & saved to SharePoint!`);
+  const synced = await pushUsersToSheet(email ? { name, uname, pass, email, role } : null);
+  if(synced) showToast(email ? `✅ ${name} added & welcome email sent!` : `✅ ${name} added & saved to SharePoint!`);
 }
 
 async function deletePerson(ukey) {
@@ -6162,8 +6180,8 @@ async function deletePerson(ukey) {
   syncPeopleToUsers();
   renderAdminPanel();
   showToast(`⏳ Removing ${person.name} & syncing to SharePoint…`);
-  await pushUsersToSheet();
-  showToast(`🗑️ ${person.name} removed & SharePoint updated!`);
+  const synced3 = await pushUsersToSheet();
+  if(synced3) showToast(`🗑️ ${person.name} removed & SharePoint updated!`);
 }
 
 /* ═══════════════════════════════════════════
