@@ -6173,6 +6173,21 @@ async function addPerson() {
   if(synced) showToast(email ? `✅ ${name} added & welcome email sent!` : `✅ ${name} added & saved to SharePoint!`);
 }
 
+async function deletePersonFromSheet(person) {
+  const email = person.email || person.u || "";
+  try {
+    const existing = await spFindByTitle(SP_CONFIG.lists.users, email);
+    if(existing) {
+      await spDeleteItem(SP_CONFIG.lists.users, existing.id);
+      delete _spItemCache[SP_CONFIG.lists.users]?.[email];
+    }
+    return true;
+  } catch(err) {
+    console.warn("⚠️ Could not delete user from SharePoint:", err);
+    return false;
+  }
+}
+
 async function deletePerson(ukey) {
   if(currentUser && currentUser.u === ukey) { showToast("⚠️ You can't remove yourself!"); return; }
   const person = _people.find(p => p.u === ukey);
@@ -6183,8 +6198,12 @@ async function deletePerson(ukey) {
   syncPeopleToUsers();
   renderAdminPanel();
   showToast(`⏳ Removing ${person.name} & syncing to SharePoint…`);
-  const synced3 = await pushUsersToSheet();
-  if(synced3) showToast(`🗑️ ${person.name} removed & SharePoint updated!`);
+  const deleted = await deletePersonFromSheet(person);
+  if(deleted) {
+    showToast(`🗑️ ${person.name} removed & deleted from SharePoint!`);
+  } else {
+    showToast(`⚠️ Removed locally, but SharePoint deletion failed — check your connection/permissions and try again.`);
+  }
 }
 
 /* ═══════════════════════════════════════════
