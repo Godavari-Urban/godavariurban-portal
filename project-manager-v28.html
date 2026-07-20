@@ -2160,9 +2160,9 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
           <div class="add-person-form">
             <div class="form-field title-name-row">
               <div>
-                <label>Title</label>
+                <label>Title *</label>
                 <select id="apTitle">
-                  <option value="">— None —</option>
+                  <option value="">— Select —</option>
                   <option value="Mr.">Mr.</option>
                   <option value="Mrs.">Mrs.</option>
                   <option value="Ms.">Ms.</option>
@@ -2214,9 +2214,9 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
     <div class="form-grid">
       <div class="form-field title-name-row">
         <div>
-          <label>Title</label>
+          <label>Title *</label>
           <select id="euTitle">
-            <option value="">— None —</option>
+            <option value="">— Select —</option>
             <option value="Mr.">Mr.</option>
             <option value="Mrs.">Mrs.</option>
             <option value="Ms.">Ms.</option>
@@ -3858,7 +3858,7 @@ async function loadUsersFromServer() {
     if(items && items.length) {
       USERS.length = 0;
       items.forEach(f => USERS.push({
-        u:    String(f.Title       || f.Email || ""),
+        u:    String(f.Username    || f.Title || f.Email || ""),
         name: String(f.DisplayName || f.Title || ""),
         role: String(f.Role        || "team"),
         email:String(f.Email       || f.Title || ""),
@@ -6077,6 +6077,7 @@ async function saveEditUser() {
   const role  = document.getElementById("euRole").value;
   const pass  = document.getElementById("euPass").value.trim();
   const email = document.getElementById("euEmail").value.trim();
+  if(!eTitle) { showToast("⚠️ Title is required — please select Mr./Mrs./Ms./Dr.!"); return; }
   if(!eRest) { showToast("⚠️ Name is required!"); return; }
   const oldPerson = { ..._people[idx] };
   _people[idx].name  = name;
@@ -6099,28 +6100,81 @@ async function saveEditUser() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  ensureUsernameColumn — the PM_Users SharePoint list may not have a
+//  "Username" column yet (only Title/DisplayName/Role/Email). This checks
+//  once per session and creates it automatically if missing, so the app's
+//  auto-generated Username always has somewhere to be saved.
+// ════════════════════════════════════════════════════════════════════════════
+let _usernameColumnEnsured = false;
+async function ensureUsernameColumn() {
+  if(_usernameColumnEnsured) return;
+  try {
+    const token = await getMsalToken();
+    const siteId = await spSiteId();
+    const listId = await spListId(SP_CONFIG.lists.users);
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if(r.ok) {
+      const data = await r.json();
+      const exists = (data.value || []).some(c => (c.name || "").toLowerCase() === "username");
+      if(!exists) {
+        const token2 = await getMsalToken();
+        const createR = await fetch(
+          `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token2}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ name: "Username", text: { allowMultipleLines: false, maxLength: 255 } })
+          }
+        );
+        if(createR.ok) console.log("✅ Created Username column in SharePoint PM_Users list");
+        else console.warn("⚠️ Could not auto-create Username column:", await createR.text());
+      }
+    }
+  } catch(err) {
+    console.warn("⚠️ Could not verify/create Username column in SharePoint:", err);
+  }
+  _usernameColumnEnsured = true; // only try once per session either way
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  pushOnePersonToSheet — creates/updates exactly ONE person in SharePoint
 //  PM_Users (proper single-record CRUD). Called after every Add / Edit in
-//  People Manager. Always sends every field (Title/Email/Role/DisplayName)
-//  together in a single request, so a person can never end up partially
-//  saved (e.g. Email+Role present but DisplayName silently missing) and a
-//  problem with one record can never block or corrupt another record.
+//  People Manager. Always sends every field (Title/Email/Role/DisplayName/
+//  Username) together in a single request, so a person can never end up
+//  partially saved, and a problem with one record can never block or
+//  corrupt another record.
 // ════════════════════════════════════════════════════════════════════════════
 async function pushOnePersonToSheet(person) {
   const email = (person.email || person.u || "").trim();
   const name  = String(person.name || "").trim().toUpperCase();
+  const uname = String(person.u    || "").trim().toUpperCase();
+  await ensureUsernameColumn();
   const fields = {
     Role:        person.role || "team",
     Email:       email,
-    DisplayName: name       // always sent — never conditionally dropped
+    DisplayName: name,       // always sent — never conditionally dropped
+    Username:    uname       // always sent — never conditionally dropped
   };
   try {
     await spUpsert(SP_CONFIG.lists.users, email, fields);
     return true;
   } catch(err) {
-    console.warn("⚠️ Could not sync user to SharePoint:", err);
-    showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
-    return false;
+    // If the Username column truly can't be created/written (e.g. permissions),
+    // retry without it so Name/Email/Role still save instead of failing entirely.
+    console.warn("⚠️ Full sync failed, retrying without Username field:", err);
+    try {
+      const { Username, ...fallbackFields } = fields;
+      await spUpsert(SP_CONFIG.lists.users, email, fallbackFields);
+      showToast("⚠️ Saved to SharePoint, but the Username column couldn't be written — Name/Email/Role saved fine.");
+      return true;
+    } catch(err2) {
+      console.warn("⚠️ Could not sync user to SharePoint:", err2);
+      showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
+      return false;
+    }
   }
 }
 
@@ -6194,6 +6248,7 @@ async function addPerson() {
   const pass  = document.getElementById("apPass").value.trim();
   const email = document.getElementById("apEmail").value.trim();
   const role  = document.getElementById("apRole").value;
+  if(!title) { showToast("⚠️ Title is required — please select Mr./Mrs./Ms./Dr.!"); return; }
   if(!rest || !uname) { showToast("⚠️ Name & username are required!"); return; }
   if(_people.find(p => p.u === uname)) { showToast("⚠️ Username already exists — choose a different one!"); return; }
   const newPerson = { u: uname, name, p: pass, role, email };
