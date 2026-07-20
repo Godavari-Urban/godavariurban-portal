@@ -2137,7 +2137,10 @@ body.dark-mode .btn-edit-proj:hover { color: #fff; }
         <div class="admin-card">
           <div class="admin-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <span>🧑‍💼 People Directory</span>
-            <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="refreshPeopleFromSharePoint()">🔄 Refresh from SharePoint</button>
+            <span style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="refreshPeopleFromSharePoint()">🔄 Refresh from SharePoint</button>
+              <button class="btn-add-person" style="padding:7px 14px;font-size:12px;" onclick="repairAllToSharePoint()">🔧 Repair All → SharePoint</button>
+            </span>
           </div>
           <div class="admin-card-sub">A Project Leader for Project A can be a Team Member for Project B — all from the same pool.</div>
           <div style="overflow-x:auto;">
@@ -3858,7 +3861,7 @@ async function loadUsersFromServer() {
     if(items && items.length) {
       USERS.length = 0;
       items.forEach(f => USERS.push({
-        u:    String(f.Username    || f.Title || f.Email || ""),
+        u:    String(f.Title       || f.Email || ""),
         name: String(f.DisplayName || f.Title || ""),
         role: String(f.Role        || "team"),
         email:String(f.Email       || f.Title || ""),
@@ -6100,81 +6103,49 @@ async function saveEditUser() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  ensureUsernameColumn — the PM_Users SharePoint list may not have a
-//  "Username" column yet (only Title/DisplayName/Role/Email). This checks
-//  once per session and creates it automatically if missing, so the app's
-//  auto-generated Username always has somewhere to be saved.
+//  repairAllToSharePoint — re-pushes every currently-loaded person's data
+//  (Name/Role/Email) to SharePoint, one record at a time. Use this to fix
+//  any historical rows that were saved before a bug fix (e.g. blank
+//  DisplayName) — no need to manually edit each person.
 // ════════════════════════════════════════════════════════════════════════════
-let _usernameColumnEnsured = false;
-async function ensureUsernameColumn() {
-  if(_usernameColumnEnsured) return;
-  try {
-    const token = await getMsalToken();
-    const siteId = await spSiteId();
-    const listId = await spListId(SP_CONFIG.lists.users);
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if(r.ok) {
-      const data = await r.json();
-      const exists = (data.value || []).some(c => (c.name || "").toLowerCase() === "username");
-      if(!exists) {
-        const token2 = await getMsalToken();
-        const createR = await fetch(
-          `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`,
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token2}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ name: "Username", text: { allowMultipleLines: false, maxLength: 255 } })
-          }
-        );
-        if(createR.ok) console.log("✅ Created Username column in SharePoint PM_Users list");
-        else console.warn("⚠️ Could not auto-create Username column:", await createR.text());
-      }
-    }
-  } catch(err) {
-    console.warn("⚠️ Could not verify/create Username column in SharePoint:", err);
+async function repairAllToSharePoint() {
+  if(!_people.length) { showToast("⚠️ No people loaded to repair!"); return; }
+  showToast(`⏳ Repairing ${_people.length} people in SharePoint…`);
+  let ok = 0, fail = 0;
+  for(const person of _people) {
+    const success = await pushOnePersonToSheet(person);
+    if(success) ok++; else fail++;
   }
-  _usernameColumnEnsured = true; // only try once per session either way
+  renderAdminPanel();
+  if(fail === 0) showToast(`✅ Repaired ${ok} people in SharePoint!`);
+  else showToast(`⚠️ Repaired ${ok} — ${fail} failed. Check connection/permissions and try again.`);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 //  pushOnePersonToSheet — creates/updates exactly ONE person in SharePoint
 //  PM_Users (proper single-record CRUD). Called after every Add / Edit in
-//  People Manager. Always sends every field (Title/Email/Role/DisplayName/
-//  Username) together in a single request, so a person can never end up
-//  partially saved, and a problem with one record can never block or
-//  corrupt another record.
+//  People Manager. Writes only to the existing PM_Users columns — Title
+//  (email, used as the unique key), Email, Role, and DisplayName (the
+//  person's Full Name). All fields are always sent together in a single
+//  request, so a person can never end up partially saved (e.g. Email+Role
+//  present but DisplayName silently missing), and a problem with one
+//  record can never block or corrupt another record.
 // ════════════════════════════════════════════════════════════════════════════
 async function pushOnePersonToSheet(person) {
   const email = (person.email || person.u || "").trim();
   const name  = String(person.name || "").trim().toUpperCase();
-  const uname = String(person.u    || "").trim().toUpperCase();
-  await ensureUsernameColumn();
   const fields = {
     Role:        person.role || "team",
     Email:       email,
-    DisplayName: name,       // always sent — never conditionally dropped
-    Username:    uname       // always sent — never conditionally dropped
+    DisplayName: name        // always sent — never conditionally dropped
   };
   try {
     await spUpsert(SP_CONFIG.lists.users, email, fields);
     return true;
   } catch(err) {
-    // If the Username column truly can't be created/written (e.g. permissions),
-    // retry without it so Name/Email/Role still save instead of failing entirely.
-    console.warn("⚠️ Full sync failed, retrying without Username field:", err);
-    try {
-      const { Username, ...fallbackFields } = fields;
-      await spUpsert(SP_CONFIG.lists.users, email, fallbackFields);
-      showToast("⚠️ Saved to SharePoint, but the Username column couldn't be written — Name/Email/Role saved fine.");
-      return true;
-    } catch(err2) {
-      console.warn("⚠️ Could not sync user to SharePoint:", err2);
-      showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
-      return false;
-    }
+    console.warn("⚠️ Could not sync user to SharePoint:", err);
+    showToast("⚠️ Saved locally only — SharePoint sync failed. Check your connection/permissions and try again.");
+    return false;
   }
 }
 
