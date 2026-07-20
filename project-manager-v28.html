@@ -6126,7 +6126,7 @@ if(document.readyState === "loading") {
 }
 
 // loginPass removed — MSAL handles sign-in
-document.getElementById("modalOverlay").addEventListener("click",e=>{ if(e.target===document.getElementById("modalOverlay")) closeModal(); });
+// New Project modal: intentionally does NOT close on outside/backdrop click — only via ✕ or Cancel, to avoid losing in-progress form data.
 document.getElementById("meetingModalOverlay").addEventListener("click",e=>{ if(e.target===document.getElementById("meetingModalOverlay")) closeMeetingModal(); });
 document.getElementById("notesModalOverlay").addEventListener("click",e=>{ if(e.target===document.getElementById("notesModalOverlay")) closeNotesModal(); });
 document.getElementById("editUserModalOverlay").addEventListener("click",e=>{ if(e.target===document.getElementById("editUserModalOverlay")) closeEditUserModal(); });
