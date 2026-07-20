@@ -2450,7 +2450,7 @@ body.dark-mode .np-pill.sel-env { background: var(--accent-light); }
 
       <!-- App Type -->
       <div class="np-section">App Type</div>
-      <select id="fType" style="display:none;"><option>Canvas App</option><option>Power Pages</option><option>Power Automate</option><option>Other Project</option></select>
+      <select id="fType" style="display:none;"><option>Canvas App</option><option>Power Pages</option><option>Power Automate</option><option>Microsoft 365 Web Application</option><option>Other Project</option></select>
       <div class="np-type-cards" id="npTypeCards">
         <div class="np-type-card selected" onclick="selectNpType(this,'Canvas App')">
           <div class="np-type-icon" style="background:linear-gradient(135deg,#eef1fe,#dde4ff);">📱</div>
@@ -2465,6 +2465,11 @@ body.dark-mode .np-pill.sel-env { background: var(--accent-light); }
         <div class="np-type-card" onclick="selectNpType(this,'Power Automate')">
           <div class="np-type-icon" style="background:linear-gradient(135deg,#fff7ed,#fed7aa);">⚡</div>
           <div><div class="np-type-name">Power Automate</div><div class="np-type-sub">Workflow automation</div></div>
+          <div class="np-type-radio"></div>
+        </div>
+        <div class="np-type-card" onclick="selectNpType(this,'Microsoft 365 Web Application')">
+          <div class="np-type-icon" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);">🧩</div>
+          <div><div class="np-type-name">Microsoft 365 Web Application</div><div class="np-type-sub">Graph API + SharePoint backend</div></div>
           <div class="np-type-radio"></div>
         </div>
         <div class="np-type-card" onclick="selectNpType(this,'Other Project')">
@@ -7830,7 +7835,7 @@ function closeTargetWarnModal() {
       <div class="ep-field"><label>App Type</label>
         <select id="epType">
           <option>Canvas App</option>
-          <option>Power Pages</option><option>Power Automate</option><option>Other Project</option>
+          <option>Power Pages</option><option>Power Automate</option><option>Microsoft 365 Web Application</option><option>Other Project</option>
         </select>
       </div>
       <div class="ep-field"><label>Priority</label>
