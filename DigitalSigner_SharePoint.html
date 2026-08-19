@@ -627,7 +627,7 @@
                 <div class="gu-modal-icon pending"><i class="fas fa-inbox"></i></div>
                 <div>
                     <div class="gu-modal-title">Documents Pending Your Signature</div>
-                    <div class="gu-modal-subtitle">Emp Code: <span id="pendingDocsEmpId" class="gu-emp-pill">--</span></div>
+                    <div class="gu-modal-subtitle">Branch: <span id="pendingDocsEmpId" class="gu-emp-pill">--</span></div>
                 </div>
             </div>
             <button class="gu-modal-close" onclick="closePendingDocs()" title="Close"><i class="fas fa-times"></i></button>
@@ -1142,14 +1142,15 @@ async function _getDigitalSignFiles() {
 }
 
 // ── Documents waiting for the signed-in manager's signature (matched by Emp_ID)
+// ── Documents waiting for the signed-in manager's signature (matched by Branch_Name)
 async function fetchMyPendingDocuments() {
-    const empId = String(currentUser?.empCode || "").trim().toLowerCase();
+    const myBranch = String(currentUser?.branch || "").trim().toLowerCase();
     const files = await _getDigitalSignFiles();
     return files.filter(i => {
         const f = i.listItem?.fields || {};
-        const itemEmp  = String(_ffield(f, "Emp_ID") ?? "").trim().toLowerCase();
-        const itemStat = String(_ffield(f, "Document_DigiSign_Status") ?? "").trim().toLowerCase();
-        return itemEmp === empId && itemEmp !== "" && itemStat === STATUS_NOT_SIGNED.toLowerCase();
+        const itemBranch = String(_ffield(f, "Branch_Name") ?? "").trim().toLowerCase();
+        const itemStat    = String(_ffield(f, "Document_DigiSign_Status") ?? "").trim().toLowerCase();
+        return itemBranch === myBranch && itemBranch !== "" && itemStat === STATUS_NOT_SIGNED.toLowerCase();
     });
 }
 
@@ -2933,7 +2934,7 @@ async function openPendingDocs() {
     const modal = document.getElementById("pendingDocsModal");
     const body  = document.getElementById("pendingDocsModalBody");
     const empIdEl = document.getElementById("pendingDocsEmpId");
-    if (empIdEl) empIdEl.textContent = currentUser?.empCode || "--";
+    if (empIdEl) empIdEl.textContent = currentUser?.branch || "--";   // ← now shows Branch, not Emp Code
     modal.style.display = "flex";
     body.innerHTML = `<div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading your pending documents...</div>`;
 
