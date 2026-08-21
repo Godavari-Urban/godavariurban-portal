@@ -1308,14 +1308,44 @@ async function callScript(payload) {
 
         // ── Admin reset signature (verify admin password via GU_Admins)
         case "adminResetSig": {
-            const { adminPass } = payload;
+            const { adminPass, empId } = payload;
             const admins = await _spGetAll("GU_Admins");
             if (!admins || admins.length === 0) return { ok: false, msg: "Admin record not found in GU_Admins." };
             const storedPass = String(admins[0].Password || "").trim();
             const inputPass  = String(adminPass || "").trim();
             if (!storedPass) return { ok: false, msg: "Admin password not configured in GU_Admins." };
             if (storedPass !== inputPass) return { ok: false, msg: "Incorrect Admin Password." };
+
+            // Actually mark the signature as revoked server-side (this used to only
+            // clear the local browser copy, leaving SharePoint's SignatureRevoked
+            // flag untouched — which is also what caused it to get stuck "on").
+            if (empId) {
+                const item = await _spFind("GU_Branches", "EmpID", empId);
+                if (item) {
+                    await _spPatch("GU_Branches", item._id, {
+                        SignatureRevoked:   false,   // reset to NOT revoked — a fresh signature is expected next
+                        SignatureVersion:   String(Date.now()),
+                        SignatureRevokedAt: new Date().toISOString()
+                    });
+                }
+            }
             return { ok: true };
+        }
+
+        // ── Called right after a user (re)registers their signature. Clears the
+        //    SignatureRevoked flag server-side and stamps a new SignatureVersion so
+        //    every device recognizes "this is a fresh, valid signature" instead of
+        //    wiping it again on the next login.
+        case "clearSignatureRevoked": {
+            const { empId } = payload;
+            const item = await _spFind("GU_Branches", "EmpID", empId);
+            if (!item) return { ok: false, msg: "Employee record not found." };
+            const version = String(Date.now());
+            await _spPatch("GU_Branches", item._id, {
+                SignatureRevoked: false,
+                SignatureVersion: version
+            });
+            return { ok: true, signatureVersion: version };
         }
 
         // ── Check device/workstation status on every app open
@@ -1698,8 +1728,19 @@ async function finishAuthorizedLogin(item, displayName) {
             empCode: item.EmpID   || displayName
         };
         const sigKey = "sig_" + currentUser.empCode;
+        // BUGFIX: this used to wipe the saved signature on EVERY login whenever
+        // SignatureRevoked was true, with no version check — so once that flag
+        // got set, the signature vanished on every single refresh forever, even
+        // after re-registering it. Now it matches the version-aware logic used
+        // in the other login path (completeMsLogin), so it only clears once per
+        // actual revocation event, and stops once a fresh SignatureVersion is stamped.
         if (item.SignatureRevoked === true || String(item.SignatureRevoked || "") === "true") {
-            localStorage.removeItem(sigKey);
+            const storedVersion = localStorage.getItem(sigKey + "_version");
+            const serverVersion = item.SignatureVersion || "";
+            if (!serverVersion || storedVersion !== serverVersion) {
+                localStorage.removeItem(sigKey);
+                localStorage.removeItem(sigKey + "_version");
+            }
         }
         currentUser.savedSig = localStorage.getItem(sigKey) || null;
         document.getElementById("authOverlay").style.display = "none";
@@ -2506,6 +2547,21 @@ async function savePermanentSig(dataUrl) {
         localStorage.setItem(sigKey, dataUrl);
         currentUser.savedSig = dataUrl;
         refreshSignatureUI();
+
+        // Tell SharePoint this signature is fresh: clear SignatureRevoked and
+        // stamp a new SignatureVersion, and remember that version locally.
+        // Without this, a stale SignatureRevoked=true flag (e.g. left over
+        // from a prior admin reset) would wipe this brand-new signature again
+        // on the very next login.
+        try {
+            const res = await callScript({ action: "clearSignatureRevoked", empId: currentUser.empCode });
+            if (res && res.ok && res.signatureVersion) {
+                localStorage.setItem(sigKey + "_version", res.signatureVersion);
+            }
+        } catch (e) {
+            // Non-fatal: signature is still saved locally even if this sync fails.
+            console.warn("Could not sync signature status to SharePoint:", e);
+        }
     }
 }
 
@@ -2558,7 +2614,8 @@ async function adminResetSignature() {
             try {
                 const res = await callScript({
                     action:    "adminResetSig",
-                    adminPass: adminPass
+                    adminPass: adminPass,
+                    empId:     currentUser.empCode
                 });
 
                 if (!res.ok) {
@@ -2569,6 +2626,7 @@ async function adminResetSignature() {
                 // Clear signature from localStorage
                 const sigKey = "sig_" + currentUser.empCode;
                 localStorage.removeItem(sigKey);
+                localStorage.removeItem(sigKey + "_version");
                 currentUser.savedSig = null;
                 refreshSignatureUI();
                 await guAlert("Signature has been reset successfully.", 'success');
