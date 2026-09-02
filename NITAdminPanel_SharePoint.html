@@ -4013,7 +4013,74 @@ async function callScript(payload) {
                 "AUTHORIZED", "IT_AUTHORIZED",
                 "Workstation authorized by IT Admin.",
                 "IT Admin");
-            return { ok: true };
+
+            // ── Notify the branch by email that IT has authorized the workstation
+            let mailSent = false, mailMsg = "";
+            const branchName = branch || item.Branch;
+            if (item.BranchEmail) {
+                try {
+                    const token = await getToken(MAIL_SCOPES);
+                    const appLink = BRANCH_APP_URL;
+                    const emailBody = {
+                        message: {
+                            subject: `Godavari Urban — Workstation Authorized — ${branchName}`,
+                            body: {
+                                contentType: "HTML",
+                                content: `<div style="font-family:Arial,sans-serif;color:#1e293b;max-width:520px;">
+<div style="background:#059669;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
+  <strong style="font-size:1.1rem;">Godavari Urban Multi-State Credit Co-Op Society</strong><br>
+  <span style="font-size:0.85rem;opacity:0.9;">E-SIGNHUB · Workstation Authorized ✔</span>
+</div>
+<div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+  <p>Dear <strong>${esc(item.EmpName || "")}</strong>,</p>
+  <p>Your workstation at <strong>${esc(branchName)}</strong> branch has been
+  <strong style="color:#059669;">authorized by the IT Department</strong>. You may now proceed
+  to complete activation.</p>
+  <table style="background:#f1f5f9;border-radius:6px;padding:14px 18px;width:100%;border-collapse:collapse;margin:16px 0;">
+    <tr><td style="padding:4px 0;color:#64748b;width:140px;">Employee ID</td><td style="padding:4px 0;font-weight:bold;">${esc(empId)}</td></tr>
+    <tr><td style="padding:4px 0;color:#64748b;">Branch</td><td style="padding:4px 0;">${esc(branchName)}</td></tr>
+    <tr><td style="padding:4px 0;color:#64748b;">Status</td><td style="padding:4px 0;font-weight:bold;color:#059669;">AUTHORIZED</td></tr>
+  </table>
+  <p><strong>Next Step:</strong></p>
+  <ol style="line-height:1.9;">
+    <li>Return to the Branch Authorization App on this workstation</li>
+    <li>Click <em>Check IT Authorization</em></li>
+    <li>Set your personal security PIN / password to finish activation</li>
+  </ol>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${appLink}" style="background:#059669;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1rem;display:inline-block;">
+      ✅ Open Branch Authorization App
+    </a>
+  </div>
+  <p style="font-size:0.8rem;color:#64748b;text-align:center;">
+    Or copy this link: <a href="${appLink}" style="color:#3b82f6;">${appLink}</a>
+  </p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0;">
+  <p style="color:#64748b;font-size:0.8rem;">Godavari Urban IT Department &nbsp;|&nbsp; Contact IT for support.</p>
+</div></div>`
+                            },
+                            toRecipients: [{ emailAddress: { address: item.BranchEmail } }]
+                        }
+                    };
+                    const mailRes = await fetch(`${GRAPH}/me/sendMail`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                        body: JSON.stringify(emailBody)
+                    });
+                    if (mailRes.ok || mailRes.status === 204) {
+                        mailSent = true;
+                    } else {
+                        const mailErr = await mailRes.json().catch(() => ({}));
+                        mailMsg = mailErr?.error?.message || `Mail send failed: ${mailRes.status}`;
+                    }
+                } catch (e) {
+                    mailMsg = e.message || "Mail send error";
+                }
+            } else {
+                mailMsg = "Branch email missing on record.";
+            }
+
+            return { ok: true, mailSent, mailMsg, branchEmail: item.BranchEmail || "" };
         }
 
         // ── Close a branch
@@ -5764,7 +5831,11 @@ function authorizeBranchByIdx(idx) {
                 ip:        b.AllowedIP
             });
             if (!res.ok) { toast("Authorization failed: " + res.msg, "error"); return; }
-            toast(`Workstation authorized for ${b.Branch}.`);
+            if (res.mailSent) {
+                toast(`Workstation authorized for ${b.Branch}. Notification email sent to ${res.branchEmail}.`);
+            } else {
+                toast(`Workstation authorized for ${b.Branch}, but notification email failed${res.mailMsg ? ": " + res.mailMsg : "."}`, "error");
+            }
             loadAllData();
         } catch(e) { toast("Network error", "error"); }
       },
