@@ -3377,6 +3377,31 @@ const TENANT_ID            = "e47e4128-1c1b-4510-a440-415145dc1cde";   // ✅ Az
 const SHAREPOINT_HOST      = "godavariurban.sharepoint.com";             // ✅ SharePoint host
 const SHAREPOINT_SITE_NAME = "GU-DigitalSigner-IT";                      // ✅ SharePoint site name
 const BRANCH_APP_URL       = "https://godavari-urban.github.io/godavariurban-portal/DigitalSigner_SharePoint.html"; // ✅ Branch app GitHub Pages URL
+
+// ✅ Godavari Urban logo — embedded as an inline (CID) attachment so it renders
+// reliably in Outlook/Gmail (data: URIs are stripped by most mail clients).
+const GODAVARI_LOGO_BASE64 = "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";
+const GODAVARI_LOGO_CID = "godavari_logo_cid";
+function godavariLogoAttachment() {
+    return {
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: "godavari-urban-logo.jpg",
+        contentType: "image/jpeg",
+        contentBytes: GODAVARI_LOGO_BASE64,
+        isInline: true,
+        contentId: GODAVARI_LOGO_CID
+    };
+}
+function godavariEmailHeader(bgColor, subtitle) {
+    return `<div style="background:${bgColor};color:#fff;padding:18px 24px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:14px;">
+  <img src="cid:${GODAVARI_LOGO_CID}" alt="Godavari Urban" style="width:42px;height:42px;border-radius:8px;background:#fff;padding:3px;object-fit:contain;">
+  <div>
+    <strong style="font-size:1.1rem;">Godavari Urban Multi-State Credit Co-Op Society</strong><br>
+    <span style="font-size:0.85rem;opacity:0.9;">${subtitle}</span>
+  </div>
+</div>`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Derived constants (do not edit)
@@ -3937,10 +3962,7 @@ async function callScript(payload) {
                     body: {
                         contentType: "HTML",
                         content: `<div style="font-family:Arial,sans-serif;color:#1e293b;max-width:520px;">
-<div style="background:#1e3a8a;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
-  <strong style="font-size:1.1rem;">Godavari Urban Multi-State Credit Co-Op Society</strong><br>
-  <span style="font-size:0.85rem;opacity:0.85;">E-SIGNHUB</span>
-</div>
+${godavariEmailHeader("#1e3a8a", "E-SIGNHUB")}
 <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
   <p>Dear <strong>${empName}</strong>,</p>
   <p>Your workstation at <strong>${branch}</strong> branch has been registered on the
@@ -3961,7 +3983,7 @@ async function callScript(payload) {
   </ol>
   <div style="text-align:center;margin:24px 0;">
     <a href="${appLink}" style="background:#1e3a8a;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1rem;display:inline-block;">
-      🔐 Open Branch Authorization App
+      🔐 Open E-SIGN HUB APP
     </a>
   </div>
   <p style="font-size:0.8rem;color:#64748b;text-align:center;">
@@ -3972,7 +3994,8 @@ async function callScript(payload) {
   <p style="color:#64748b;font-size:0.8rem;">Godavari Urban IT Department &nbsp;|&nbsp; Contact IT for support.</p>
 </div></div>`
                     },
-                    toRecipients: [{ emailAddress: { address: email } }]
+                    toRecipients: [{ emailAddress: { address: email } }],
+                    attachments: [ godavariLogoAttachment() ]
                 }
             };
             const mailRes = await fetch(`${GRAPH}/me/sendMail`, {
@@ -4027,10 +4050,7 @@ async function callScript(payload) {
                             body: {
                                 contentType: "HTML",
                                 content: `<div style="font-family:Arial,sans-serif;color:#1e293b;max-width:520px;">
-<div style="background:#059669;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;">
-  <strong style="font-size:1.1rem;">Godavari Urban Multi-State Credit Co-Op Society</strong><br>
-  <span style="font-size:0.85rem;opacity:0.9;">E-SIGNHUB · Workstation Authorized ✔</span>
-</div>
+${godavariEmailHeader("#059669", "E-SIGNHUB · Workstation Authorized ✔")}
 <div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
   <p>Dear <strong>${esc(item.EmpName || "")}</strong>,</p>
   <p>Your workstation at <strong>${esc(branchName)}</strong> branch has been
@@ -4049,7 +4069,7 @@ async function callScript(payload) {
   </ol>
   <div style="text-align:center;margin:24px 0;">
     <a href="${appLink}" style="background:#059669;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1rem;display:inline-block;">
-      ✅ Open Branch Authorization App
+      ✅ Open E-SIGN HUB APP
     </a>
   </div>
   <p style="font-size:0.8rem;color:#64748b;text-align:center;">
@@ -4059,7 +4079,8 @@ async function callScript(payload) {
   <p style="color:#64748b;font-size:0.8rem;">Godavari Urban IT Department &nbsp;|&nbsp; Contact IT for support.</p>
 </div></div>`
                             },
-                            toRecipients: [{ emailAddress: { address: item.BranchEmail } }]
+                            toRecipients: [{ emailAddress: { address: item.BranchEmail } }],
+                            attachments: [ godavariLogoAttachment() ]
                         }
                     };
                     const mailRes = await fetch(`${GRAPH}/me/sendMail`, {
@@ -4163,7 +4184,72 @@ async function callScript(payload) {
             });
             await logJourney(item.Branch, empId, item.EmpName, item.Post, item.AllowedIP,
                 "PENDING_ACTIVATION", "LOGIN_RESET", reason || "Login reset by IT", "IT Admin");
-            return { ok: true };
+
+            // ── Notify the branch by email that their login/password has been reset
+            let mailSent = false, mailMsg = "";
+            if (item.BranchEmail) {
+                try {
+                    const token = await getToken(MAIL_SCOPES);
+                    const appLink = BRANCH_APP_URL;
+                    const emailBody = {
+                        message: {
+                            subject: `Godavari Urban — Password Reset — ${item.Branch}`,
+                            body: {
+                                contentType: "HTML",
+                                content: `<div style="font-family:Arial,sans-serif;color:#1e293b;max-width:520px;">
+${godavariEmailHeader("#d97706", "E-SIGNHUB · Password Reset")}
+<div style="border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+  <p>Dear <strong>${esc(item.EmpName || "")}</strong>,</p>
+  <p>Your login for <strong>${esc(item.Branch)}</strong> branch has been
+  <strong style="color:#d97706;">reset by the IT Department</strong>. Your previous password
+  is no longer valid and you will need to set a new one.</p>
+  <table style="background:#f1f5f9;border-radius:6px;padding:14px 18px;width:100%;border-collapse:collapse;margin:16px 0;">
+    <tr><td style="padding:4px 0;color:#64748b;width:140px;">Employee ID</td><td style="padding:4px 0;font-weight:bold;">${esc(empId)}</td></tr>
+    <tr><td style="padding:4px 0;color:#64748b;">Branch</td><td style="padding:4px 0;">${esc(item.Branch)}</td></tr>
+    <tr><td style="padding:4px 0;color:#64748b;">Status</td><td style="padding:4px 0;font-weight:bold;color:#d97706;">PASSWORD RESET</td></tr>
+  </table>
+  <p><strong>Next Step:</strong></p>
+  <ol style="line-height:1.9;">
+    <li>Click the button below to open the E-SIGN HUB app</li>
+    <li>Enter your Employee ID: <strong>${esc(empId)}</strong></li>
+    <li>You will be prompted to set a new personal security PIN / password</li>
+  </ol>
+  <div style="text-align:center;margin:24px 0;">
+    <a href="${appLink}" style="background:#d97706;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1rem;display:inline-block;">
+      🔑 Open E-SIGN HUB APP
+    </a>
+  </div>
+  <p style="font-size:0.8rem;color:#64748b;text-align:center;">
+    Or copy this link: <a href="${appLink}" style="color:#3b82f6;">${appLink}</a>
+  </p>
+  <p style="color:#ef4444;font-size:0.85rem;">⚠️ If you did not request this reset, please contact IT immediately. Do NOT share your password with anyone — IT will never ask for your password.</p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0;">
+  <p style="color:#64748b;font-size:0.8rem;">Godavari Urban IT Department &nbsp;|&nbsp; Contact IT for support.</p>
+</div></div>`
+                            },
+                            toRecipients: [{ emailAddress: { address: item.BranchEmail } }],
+                            attachments: [ godavariLogoAttachment() ]
+                        }
+                    };
+                    const mailRes = await fetch(`${GRAPH}/me/sendMail`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                        body: JSON.stringify(emailBody)
+                    });
+                    if (mailRes.ok || mailRes.status === 204) {
+                        mailSent = true;
+                    } else {
+                        const mailErr = await mailRes.json().catch(() => ({}));
+                        mailMsg = mailErr?.error?.message || `Mail send failed: ${mailRes.status}`;
+                    }
+                } catch (e) {
+                    mailMsg = e.message || "Mail send error";
+                }
+            } else {
+                mailMsg = "Branch email missing on record.";
+            }
+
+            return { ok: true, mailSent, mailMsg, branchEmail: item.BranchEmail || "" };
         }
 
         // ── Assign secondary branch (from vacant branch)
@@ -4484,7 +4570,7 @@ function _showPwdResetPopup(pending) {
         </div>
         <ul style="list-style:none;padding:0;margin:0 0 20px;">${listHtml}${extra}</ul>
         <div style="display:flex;gap:10px;">
-          <button onclick="showSection('tools');document.getElementById('_pwdPopupOverlay')?.remove();"
+          <button onclick="switchTab('tools');document.getElementById('_pwdPopupOverlay')?.remove();"
             style="flex:1;padding:10px;background:#ef4444;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:0.88rem;">
             ✅ Go to IT Tools
           </button>
@@ -6588,7 +6674,11 @@ async function resetBranchLogin() {
                 reason:    "Login reset from IT Tools"
             });
             if (!res.ok) { toast("Error: " + res.msg, "error"); return; }
-            toast(`${empId} login reset. They will be forced to set new password.`);
+            if (res.mailSent) {
+                toast(`${empId} login reset. Notification email sent to ${res.branchEmail}.`);
+            } else {
+                toast(`${empId} login reset, but notification email failed${res.mailMsg ? ": " + res.mailMsg : "."}`, "error");
+            }
             document.getElementById("rl_branch").value = "";
             document.getElementById("rl_empid").value = "";
         } catch(e) { toast("Network error", "error"); }
