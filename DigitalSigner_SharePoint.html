@@ -2886,18 +2886,31 @@ async function _buildSignedPdf() {
     //    the hash will not match and the document fails verification.
     try {
         const docHash = await sha256Bytes(pdfDataUri);
-        await _spPost("GU_SignedDocs", {
+        const baseRecord = {
             EventID:  eventId,
             Branch:   currentUser.branch,
             EmpID:    currentUser.empCode,
             EmpName:  currentUser.name,
             Post:     currentUser.post,
-            RefID:    currentSigningSource?.refId   || "",
-            DocType:  currentSigningSource?.docType || "",
             DocHash:  docHash,
             SignedAt: signedAt.toISOString(),
             FileName: fileName
-        });
+        };
+        try {
+            // Preferred: include RefID/DocType so "My Signing History" can show
+            // them (requires the RefID/DocType columns to exist in GU_SignedDocs
+            // — see SharePoint setup guide above).
+            await _spPost("GU_SignedDocs", {
+                ...baseRecord,
+                RefID:   currentSigningSource?.refId   || "",
+                DocType: currentSigningSource?.docType || ""
+            });
+        } catch (colErr) {
+            // Columns likely don't exist yet in SharePoint — fall back to saving
+            // without them rather than losing the verification record entirely.
+            console.warn("GU_SignedDocs save with RefID/DocType failed, retrying without them (add those columns in SharePoint to enable Ref ID in Signing History):", colErr);
+            await _spPost("GU_SignedDocs", baseRecord);
+        }
     } catch (e) {
         await guAlert(
             "The document was signed, but its verification record could not be saved " +
@@ -3057,11 +3070,11 @@ async function openSigningHistory() {
             const signedAt = r.SignedAt ? new Date(r.SignedAt) : null;
             const dateStr  = signedAt ? fmtDate(signedAt) : "-";
             const timeStr  = signedAt ? signedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : "";
-            // Same chip layout/icons as "Documents Pending Your Signature" (Ref,
-            // Branch, Emp ID, Doc Type) so both lists read consistently. Chips for
-            // fields with no value are simply omitted — no filler/placeholder text.
-            const refChip  = r.RefID   ? `<span class="gu-meta-chip"><i class="fas fa-hashtag"></i> Ref ${r.RefID}</span>` : "";
-            const typeChip = r.DocType ? `<span class="gu-meta-chip type"><i class="fas fa-tag"></i> ${r.DocType}</span>` : "";
+            // Identical chip set/order/icons as "Documents Pending Your Signature"
+            // (Ref, Branch, Emp ID, Doc Type) so both lists look the same. Always
+            // rendered — falls back to "—" if a record predates these fields.
+            const refChip  = `<span class="gu-meta-chip"><i class="fas fa-hashtag"></i> Ref ${r.RefID || "—"}</span>`;
+            const typeChip = `<span class="gu-meta-chip type"><i class="fas fa-tag"></i> ${r.DocType || "—"}</span>`;
             return `
             <div class="gu-hist-card">
                 <div class="gu-hist-icon"><i class="fas fa-file-circle-check"></i></div>
