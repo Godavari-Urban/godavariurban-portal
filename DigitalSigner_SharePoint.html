@@ -1023,12 +1023,16 @@ function _buildITMail(opts) {
     const { title, subtitle = "", introHtml = "", rows = [], notes = [], branch = "—" } = opts;
 
     const logoSrc = document.getElementById("guLogoImg")?.src || "";
+    const FONT = "'Segoe UI',Arial,sans-serif";
 
-    const rowsHtml = rows.map((r, i) => `
-        <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'};">
-            <td style="padding:11px 16px;font-weight:600;color:#64748b;width:38%;border-bottom:1px solid #f1f5f9;font-size:0.84rem;">${r.label}</td>
-            <td style="padding:11px 16px;color:#0f172a;font-weight:600;border-bottom:1px solid #f1f5f9;font-size:0.88rem;">${r.value ?? "—"}</td>
-        </tr>`).join("");
+    const rowsHtml = rows.map((r, i) => {
+        const bg = i % 2 === 0 ? "#f8fafc" : "#ffffff";
+        return `
+        <tr>
+            <td width="38%" bgcolor="${bg}" style="background-color:${bg};padding:11px 16px;font-weight:600;color:#64748b;font-size:13px;border-bottom:1px solid #f1f5f9;font-family:${FONT};">${r.label}</td>
+            <td bgcolor="${bg}" style="background-color:${bg};padding:11px 16px;color:#0f172a;font-weight:600;font-size:14px;border-bottom:1px solid #f1f5f9;font-family:${FONT};">${r.value ?? "—"}</td>
+        </tr>`;
+    }).join("");
 
     const TONES = {
         warning: { bg: "#fef3c7", border: "#f59e0b", color: "#92400e" },
@@ -1037,44 +1041,65 @@ function _buildITMail(opts) {
     };
     const notesHtml = notes.map(n => {
         const t = TONES[n.tone] || TONES.info;
-        return `<div style="background:${t.bg};border-left:4px solid ${t.border};padding:14px 18px;border-radius:6px;color:${t.color};margin:18px 0 0;font-size:0.86rem;line-height:1.6;">${n.html}</div>`;
+        return `
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;">
+          <tr>
+            <td bgcolor="${t.bg}" style="background-color:${t.bg};border-left:4px solid ${t.border};padding:14px 18px;color:${t.color};font-size:13px;line-height:1.6;font-family:${FONT};">${n.html}</td>
+          </tr>
+        </table>`;
     }).join("");
 
+    // Table-based layout with solid background-color (+ bgcolor attribute)
+    // everywhere, and NO CSS gradients — Outlook strips unsupported
+    // `background: linear-gradient(...)` declarations, which previously left
+    // the navy header with a blank/white background and invisible white text.
     return `
-<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:620px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
-  <div style="background:linear-gradient(135deg,#172554 0%,#1e3a8a 100%);padding:28px 30px;text-align:center;">
-    ${logoSrc ? `<img src="${logoSrc}" alt="Godavari Urban" style="width:50px;height:50px;object-fit:contain;margin-bottom:10px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));">` : ""}
-    <div style="color:#ffffff;font-size:1.15rem;font-weight:700;letter-spacing:0.2px;">Godavari Urban</div>
-    <div style="color:#93c5fd;font-size:0.7rem;letter-spacing:0.6px;text-transform:uppercase;margin-top:3px;">Multi-State Credit Co-Op Society Ltd. &nbsp;·&nbsp; E-SIGNHUB</div>
-    <div style="width:36px;height:2px;background:#3b82f6;margin:14px auto;border-radius:2px;"></div>
-    <div style="color:#ffffff;font-size:1rem;font-weight:600;">${title}</div>
-    ${subtitle ? `<div style="color:#bfdbfe;font-size:0.8rem;margin-top:3px;">${subtitle}</div>` : ""}
-  </div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f5;padding:24px 0;">
+<tr><td align="center">
+<table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:14px;font-family:${FONT};">
 
-  <div style="padding:30px 32px 8px;">
-    <p style="font-size:0.94rem;color:#1e293b;margin:0 0 12px;">Dear IT Department,</p>
-    <div style="font-size:0.89rem;color:#334155;line-height:1.65;margin:0 0 18px;">${introHtml}</div>
+  <tr>
+    <td align="center" bgcolor="#1e3a8a" style="background-color:#1e3a8a;padding:28px 30px;border-radius:14px 14px 0 0;">
+      ${logoSrc ? `<img src="${logoSrc}" width="50" height="50" alt="Godavari Urban" style="display:block;margin:0 auto 10px;width:50px;height:50px;">` : ""}
+      <div style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:0.2px;font-family:${FONT};">Godavari Urban</div>
+      <div style="color:#bfdbfe;font-size:11px;letter-spacing:0.6px;text-transform:uppercase;margin-top:4px;font-family:${FONT};">Multi-State Credit Co-Op Society Ltd. &nbsp;&middot;&nbsp; E-SIGNHUB</div>
+      <div style="width:36px;height:2px;line-height:2px;font-size:2px;background-color:#3b82f6;margin:14px auto;">&nbsp;</div>
+      <div style="color:#ffffff;font-size:16px;font-weight:600;font-family:${FONT};">${title}</div>
+      ${subtitle ? `<div style="color:#bfdbfe;font-size:13px;margin-top:3px;font-family:${FONT};">${subtitle}</div>` : ""}
+    </td>
+  </tr>
 
-    ${rows.length ? `
-    <table style="width:100%;border-collapse:collapse;border:1px solid #eef1f5;border-radius:10px;overflow:hidden;margin-bottom:4px;">
-      ${rowsHtml}
-    </table>` : ""}
+  <tr>
+    <td style="padding:30px 32px 8px;">
+      <p style="font-size:15px;color:#1e293b;margin:0 0 12px;font-family:${FONT};">Dear IT Department,</p>
+      <div style="font-size:14px;color:#334155;line-height:1.65;margin:0 0 18px;font-family:${FONT};">${introHtml}</div>
 
-    ${notesHtml}
+      ${rows.length ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eef1f5;border-radius:10px;">
+        ${rowsHtml}
+      </table>` : ""}
 
-    <p style="font-size:0.87rem;color:#334155;margin:24px 0 0;">Thank you for your support.</p>
+      ${notesHtml}
 
-    <div style="font-size:0.87rem;color:#1e293b;margin-top:16px;line-height:1.55;">
-      Regards,<br>
-      <strong>${branch}</strong><br>
-      Godavari Urban Multi-State Credit Co-Op Society Ltd.
-    </div>
-  </div>
+      <p style="font-size:14px;color:#334155;margin:24px 0 0;font-family:${FONT};">Thank you for your support.</p>
 
-  <div style="background:#f8fafc;padding:14px;text-align:center;color:#94a3b8;font-size:0.7rem;border-top:1px solid #eef1f5;margin-top:26px;">
-    This is an automated notification from Godavari Urban E-SIGNHUB. Please do not reply directly to this email.
-  </div>
-</div>`;
+      <div style="font-size:14px;color:#1e293b;margin-top:16px;line-height:1.55;font-family:${FONT};">
+        Regards,<br>
+        <strong>${branch}</strong><br>
+        Godavari Urban Multi-State Credit Co-Op Society Ltd.
+      </div>
+    </td>
+  </tr>
+
+  <tr>
+    <td bgcolor="#f8fafc" style="background-color:#f8fafc;padding:14px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #eef1f5;border-radius:0 0 14px 14px;font-family:${FONT};">
+      This is an automated notification from Godavari Urban E-SIGNHUB. Please do not reply directly to this email.
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>`;
 }
 
 // Convert outgoing fields (code → internal SP names) for PATCH/POST
@@ -3032,15 +3057,11 @@ async function openSigningHistory() {
             const signedAt = r.SignedAt ? new Date(r.SignedAt) : null;
             const dateStr  = signedAt ? fmtDate(signedAt) : "-";
             const timeStr  = signedAt ? signedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : "";
-            // Ref ID is the meaningful, human-readable identifier (matches the
-            // "Documents Pending Your Signature" list). Manually-uploaded docs
-            // (not sourced from the DIGITAL_SIGN library) won't have one.
-            const refChip = r.RefID
-                ? `<span class="gu-meta-chip"><i class="fas fa-hashtag"></i> Ref ${r.RefID}</span>`
-                : `<span class="gu-meta-chip"><i class="fas fa-upload"></i> Manual Upload</span>`;
-            const typeChip = r.DocType
-                ? `<span class="gu-meta-chip type"><i class="fas fa-tag"></i> ${r.DocType}</span>`
-                : "";
+            // Same chip layout/icons as "Documents Pending Your Signature" (Ref,
+            // Branch, Emp ID, Doc Type) so both lists read consistently. Chips for
+            // fields with no value are simply omitted — no filler/placeholder text.
+            const refChip  = r.RefID   ? `<span class="gu-meta-chip"><i class="fas fa-hashtag"></i> Ref ${r.RefID}</span>` : "";
+            const typeChip = r.DocType ? `<span class="gu-meta-chip type"><i class="fas fa-tag"></i> ${r.DocType}</span>` : "";
             return `
             <div class="gu-hist-card">
                 <div class="gu-hist-icon"><i class="fas fa-file-circle-check"></i></div>
@@ -3049,6 +3070,7 @@ async function openSigningHistory() {
                     <div class="gu-hist-meta">
                         ${refChip}
                         <span class="gu-meta-chip branch"><i class="fas fa-location-dot"></i> ${r.Branch || "-"}</span>
+                        <span class="gu-meta-chip"><i class="fas fa-user"></i> ${r.EmpID || "-"}</span>
                         ${typeChip}
                     </div>
                 </div>
