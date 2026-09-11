@@ -727,6 +727,7 @@
 //  ║       │ DocHash             │ Single line of text (mark as Indexed)   │       ║
 //  ║       │ SignedAt            │ Single line of text                     │       ║
 //  ║       │ FileName            │ Single line of text                     │       ║
+//  ║       │ RefID               │ Single line of text                     │       ║
 //  ║       └─────────────────────┴─────────────────────────────────────────┘       ║
 //  ║                                                                                ║
 //  ║  ── STEP 3:  Import Your Existing Data ──                                     ║
@@ -973,7 +974,8 @@ const _SP_WRITE_MAP_BRANCHJOURNEY = {
 // column names directly, so SharePoint kept the real names internally (no field_N
 // renaming) — only the built-in Title column needs a code-name mapping.
 const _SP_WRITE_MAP_SIGNEDDOCS = {
-    "EventID": "Title"
+    "EventID": "Title",
+    "RefID":   "RefID"
 };
 
 // GU_PwdResetRequests: new list for password reset requests from branch tool.
@@ -2738,7 +2740,8 @@ async function _buildSignedPdf() {
             Post:     currentUser.post,
             DocHash:  docHash,
             SignedAt: signedAt.toISOString(),
-            FileName: fileName
+            FileName: fileName,
+            RefID:    currentSigningSource?.refId || ""
         });
     } catch (e) {
         await guAlert(
@@ -2898,19 +2901,20 @@ async function openSigningHistory() {
         const rows = mine.map(r => {
             const signedAt = r.SignedAt ? new Date(r.SignedAt) : null;
             const dateStr  = signedAt ? fmtDate(signedAt) : "-";
-            const timeStr  = signedAt ? signedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : "";
             return `
             <div class="gu-hist-card">
                 <div class="gu-hist-icon"><i class="fas fa-file-circle-check"></i></div>
                 <div class="gu-hist-main">
                     <div class="gu-hist-name">${r.FileName || "-"}</div>
                     <div class="gu-hist-meta">
+                        <span class="gu-meta-chip"><i class="fas fa-hashtag"></i> Ref ${r.RefID || "-"}</span>
+                        <span class="gu-meta-chip branch"><i class="fas fa-location-dot"></i> ${r.Branch || "-"}</span>
+                        <span class="gu-meta-chip"><i class="fas fa-user"></i> ${r.EmpID || "-"}</span>
                         <span class="gu-meta-chip"><i class="fas fa-fingerprint"></i> ${r.EventID || "-"}</span>
                     </div>
                 </div>
                 <div class="gu-hist-time">
                     <div class="gu-hist-date">${dateStr}</div>
-                    <div class="gu-hist-clock">${timeStr}</div>
                 </div>
             </div>`;
         }).join("");
