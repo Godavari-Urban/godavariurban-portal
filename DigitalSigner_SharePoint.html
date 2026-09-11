@@ -149,12 +149,57 @@
         .gu-modal-icon.history { background: linear-gradient(145deg,#eff6ff,#dbeafe); color: var(--primary); }
         .gu-modal-icon.pending { background: linear-gradient(145deg,#fff7ed,#ffedd5); color: #d97706; }
         .gu-modal-icon.verify  { background: linear-gradient(145deg,#f0fdf4,#dcfce7); color: var(--success); }
-        .gu-verify-field { padding: 10px 14px; border-right: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; }
+        .gu-verify-section-title {
+            font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase;
+            letter-spacing: 0.04em; margin: 0 0 10px; display: flex; align-items: center; gap: 7px;
+        }
+        .gu-verify-section-title .gu-verify-count {
+            background: #eef2ff; color: #4338ca; font-weight: 700; border-radius: 20px;
+            padding: 2px 9px; font-size: 0.68rem; text-transform: none; letter-spacing: 0;
+        }
+        .gu-verify-grid {
+            display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #eef2f7;
+            border-radius: 12px; overflow: hidden; background: #fff;
+        }
+        .gu-verify-field { padding: 12px 16px; border-right: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; transition: background .15s; }
+        .gu-verify-field:hover { background: #f8fafc; }
         .gu-verify-field:nth-child(2n) { border-right: none; }
-        .gu-verify-field-label { font-size: 0.7rem; color: #94a3b8; margin: 0; }
-        .gu-verify-field-value { font-size: 0.85rem; color: #1e293b; margin: 2px 0 0; font-weight: 600; }
-        .gu-verify-attach { width: 72px; height: 90px; background: #f8fafc; border-radius: 10px; border: 1px solid #eef2f7; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 1.3rem; cursor: pointer; text-decoration: none; flex-shrink: 0; }
-        .gu-verify-attach:hover { border-color: #bfdbfe; }
+        .gu-verify-field-label { font-size: 0.68rem; color: #94a3b8; margin: 0; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+        .gu-verify-field-value { font-size: 0.86rem; color: #0f172a; margin: 4px 0 0; font-weight: 600; line-height: 1.4; word-break: break-word; }
+        .gu-verify-field-value.empty { color: #cbd5e1; font-weight: 500; font-style: italic; }
+
+        .gu-verify-attach-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+        .gu-verify-attach {
+            width: 132px; background: #fff; border: 1px solid #eef2f7; border-radius: 14px;
+            padding: 16px 10px 12px; display: flex; flex-direction: column; align-items: center;
+            gap: 9px; text-align: center; cursor: pointer; text-decoration: none;
+            transition: border-color .15s, box-shadow .15s, transform .15s;
+        }
+        .gu-verify-attach:hover { border-color: #bfdbfe; box-shadow: 0 10px 24px -10px rgba(30,58,138,0.22); transform: translateY(-2px); }
+        .gu-verify-attach-icon {
+            width: 46px; height: 46px; border-radius: 13px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+        }
+        .gu-verify-attach-icon.pdf   { background: linear-gradient(145deg,#fef2f2,#fee2e2); color: #dc2626; }
+        .gu-verify-attach-icon.image { background: linear-gradient(145deg,#eff6ff,#dbeafe); color: #2563eb; }
+        .gu-verify-attach-icon.other { background: #f1f5f9; color: #64748b; }
+        .gu-verify-attach-name {
+            font-size: 0.72rem; color: #334155; font-weight: 600; width: 100%;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .gu-verify-attach-preview { font-size: 0.68rem; color: #2563eb; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+        .gu-verify-attach:hover .gu-verify-attach-preview { text-decoration: underline; }
+
+        /* ── ATTACHMENT LIGHTBOX ── */
+        .gu-attach-preview-frame { display: flex; align-items: center; justify-content: center; min-height: 320px; height: 62vh; background: #f1f5f9; border-radius: 12px; overflow: hidden; }
+        .gu-attach-preview-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .gu-attach-preview-frame iframe { width: 100%; height: 100%; border: none; }
+        .gu-attach-download {
+            display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+            border-radius: 10px; background: var(--primary); color: #fff; font-weight: 600;
+            font-size: 0.85rem; text-decoration: none; transition: background .15s, transform .15s;
+        }
+        .gu-attach-download:hover { background: var(--primary-dark); transform: translateY(-1px); }
         .gu-verify-banner { margin: 0 22px 0; background: #fef3c7; border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; color: #92400e; display: flex; gap: 10px; align-items: flex-start; }
         .gu-verify-reason { display: none; margin-top: 12px; }
         .gu-verify-reason textarea { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-family: inherit; resize: vertical; min-height: 70px; }
@@ -648,6 +693,29 @@
         </div>
         <div class="gu-modal-body" id="verifyModalBody">
             <div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading data to verify...</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ ATTACHMENT PREVIEW LIGHTBOX (opened from within Verify Before Signing) ══ -->
+<div id="attachPreviewModal" class="gu-modal-overlay" style="z-index:999999;">
+    <div class="gu-modal-box" style="max-width:760px;">
+        <div class="gu-modal-accent"></div>
+        <div class="gu-modal-header">
+            <div class="gu-modal-header-left">
+                <div class="gu-modal-icon verify"><i class="fas fa-file-lines"></i></div>
+                <div>
+                    <div class="gu-modal-title" style="font-size:0.95rem;" id="attachPreviewTitle">Attachment</div>
+                    <div class="gu-modal-subtitle">Bill attachment preview</div>
+                </div>
+            </div>
+            <button class="gu-modal-close" onclick="closeAttachmentPreview()" title="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="gu-modal-body" id="attachPreviewBody"></div>
+        <div style="padding:14px 22px; border-top:1px solid #f1f5f9; display:flex; justify-content:flex-end; background:#fafbfc;">
+            <a id="attachPreviewDownload" class="gu-attach-download" style="display:none;" href="#" download>
+                <i class="fas fa-download"></i> Download
+            </a>
         </div>
     </div>
 </div>
@@ -3163,11 +3231,15 @@ function _renderVerifyModal(source, record, attachments) {
     const attachList = Array.isArray(attachments) ? attachments : [];
     _verifyAttachCache = attachList;
 
-    const fieldRows = VERIFY_FIELDS.map(vf => `
+    const fieldRows = VERIFY_FIELDS.map(vf => {
+        const raw = _ffieldByDisplay(f, columnMap, vf.display);
+        const shown = (raw === undefined || raw === null || raw === "") ? "-" : raw;
+        return `
         <div class="gu-verify-field">
             <p class="gu-verify-field-label">${vf.label}</p>
-            <p class="gu-verify-field-value">${_ffieldByDisplay(f, columnMap, vf.display) ?? "-"}</p>
-        </div>`).join("");
+            <p class="gu-verify-field-value${shown === "-" ? " empty" : ""}">${shown}</p>
+        </div>`;
+    }).join("");
 
     let attachHtml;
     if (attachError) {
@@ -3177,7 +3249,7 @@ function _renderVerifyModal(source, record, attachments) {
             const kind = _verifyFileKind(a.name);
             return `
             <div class="gu-verify-attach" onclick="openAttachmentPreview(${idx})" title="${a.name}">
-                <i class="fas ${_verifyFileIcon(kind)}"></i>
+                <div class="gu-verify-attach-icon ${kind}"><i class="fas ${_verifyFileIcon(kind)}"></i></div>
                 <span class="gu-verify-attach-name">${a.name}</span>
                 <span class="gu-verify-attach-preview"><i class="fas fa-eye"></i> Preview</span>
             </div>`;
@@ -3193,28 +3265,80 @@ function _renderVerifyModal(source, record, attachments) {
             <i class="fas fa-triangle-exclamation" style="margin-top:2px;"></i>
             <span>No matching data-entry record was found for Ref ${source.refId || "(none)"}. You can still review the PDF itself before signing.</span>
         </div>`}
-        <div style="padding:16px 22px;">
-            <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; font-weight:600;">Submitted details — Ref ${source.refId || "-"}</p>
-            <div style="display:grid; grid-template-columns:1fr 1fr; border:1px solid #eef2f7; border-radius:10px; overflow:hidden;">
+        <div style="padding:16px 22px 4px;">
+            <p class="gu-verify-section-title"><i class="fas fa-clipboard-check"></i> Submitted details <span class="gu-verify-count">Ref ${source.refId || "-"}</span></p>
+            <div class="gu-verify-grid">
                 ${fieldRows || `<div class="gu-verify-field" style="grid-column:1/-1;">No fields configured to show.</div>`}
             </div>
         </div>
-        <div style="padding:0 22px 16px;">
-            <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; font-weight:600;">Bill attachments</p>
-            <div style="display:flex; gap:8px; flex-wrap:wrap;">${attachHtml}</div>
+        <div style="padding:18px 22px 16px;">
+            <p class="gu-verify-section-title"><i class="fas fa-paperclip"></i> Bill attachments <span class="gu-verify-count">${attachList.length}</span></p>
+            <div class="gu-verify-attach-grid">${attachHtml}</div>
         </div>
         <div class="gu-verify-reason" id="verifyReasonBox">
             <p style="font-size:0.8rem; color:#64748b; margin:0 0 8px;">What needs to be fixed? The requester will see this note.</p>
             <textarea id="verifyReasonText" placeholder="e.g. Amount on bill doesn't match entered amount"></textarea>
         </div>
         <div style="padding:16px 22px; border-top:1px solid #f1f5f9; display:flex; gap:10px; justify-content:flex-end; background:#fafbfc;">
-            <button class="btn btn-danger-outline" id="verifySendBackBtn" onclick="_toggleSendBackReason()">
+            <button class="btn btn-danger-outline" id="verifySendBackBtn" onclick="_toggleSendBackReason()" style="width:auto; margin-top:0;">
                 <i class="fas fa-undo"></i> Send back for correction
             </button>
-            <button class="btn btn-success" onclick="confirmVerification()">
+            <button class="btn btn-success" onclick="confirmVerification()" style="width:auto; padding:12px 20px; font-size:0.9rem;">
                 <i class="fas fa-check"></i> Confirm — looks correct
             </button>
         </div>`;
+}
+
+// ── Attachment lightbox: fetches the file as an authenticated blob (classic REST
+//    attachments) or uses the pre-authenticated Graph download URL (library path),
+//    then shows it inline for images/PDFs with a download fallback for anything else.
+async function openAttachmentPreview(idx) {
+    const a = _verifyAttachCache[idx];
+    if (!a) return;
+    const modal = document.getElementById("attachPreviewModal");
+    const body  = document.getElementById("attachPreviewBody");
+    const title = document.getElementById("attachPreviewTitle");
+    const dl    = document.getElementById("attachPreviewDownload");
+    title.textContent = a.name;
+    dl.style.display = "none";
+    modal.style.display = "flex";
+    body.innerHTML = `<div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading ${a.name}...</div>`;
+
+    try {
+        let fileUrl;
+        if (a.graphDownloadUrl) {
+            fileUrl = a.graphDownloadUrl; // already pre-authenticated by Graph
+        } else if (a.restUrl) {
+            const token = await _getSpRestToken();
+            const res = await fetch(a.restUrl, { headers: { Authorization: `Bearer ${token}` } });
+            if (!res.ok) throw new Error(`Could not load this file (HTTP ${res.status}).`);
+            fileUrl = URL.createObjectURL(await res.blob());
+        } else {
+            throw new Error("No file URL available for this attachment.");
+        }
+
+        const kind = _verifyFileKind(a.name);
+        if (kind === "image") {
+            body.innerHTML = `<div class="gu-attach-preview-frame"><img src="${fileUrl}" alt="${a.name}"></div>`;
+        } else if (kind === "pdf") {
+            body.innerHTML = `<div class="gu-attach-preview-frame"><iframe src="${fileUrl}" title="${a.name}"></iframe></div>`;
+        } else {
+            body.innerHTML = `<div class="gu-empty-state">
+                <div class="gu-empty-icon"><i class="fas fa-file"></i></div>
+                <div class="gu-empty-title">Preview not available for this file type</div>
+                <div class="gu-empty-sub">Use the download button below instead.</div>
+            </div>`;
+        }
+        dl.href = fileUrl;
+        dl.download = a.name;
+        dl.style.display = "inline-flex";
+    } catch (e) {
+        body.innerHTML = `<div class="gu-error-state"><i class="fas fa-triangle-exclamation"></i> ${e.message}</div>`;
+    }
+}
+function closeAttachmentPreview() {
+    document.getElementById("attachPreviewModal").style.display = "none";
+    document.getElementById("attachPreviewBody").innerHTML = "";
 }
 
 function _toggleSendBackReason() {
