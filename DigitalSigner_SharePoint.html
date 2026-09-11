@@ -148,6 +148,17 @@
         }
         .gu-modal-icon.history { background: linear-gradient(145deg,#eff6ff,#dbeafe); color: var(--primary); }
         .gu-modal-icon.pending { background: linear-gradient(145deg,#fff7ed,#ffedd5); color: #d97706; }
+        .gu-modal-icon.verify  { background: linear-gradient(145deg,#f0fdf4,#dcfce7); color: var(--success); }
+        .gu-verify-field { padding: 10px 14px; border-right: 1px solid #eef2f7; border-bottom: 1px solid #eef2f7; }
+        .gu-verify-field:nth-child(2n) { border-right: none; }
+        .gu-verify-field-label { font-size: 0.7rem; color: #94a3b8; margin: 0; }
+        .gu-verify-field-value { font-size: 0.85rem; color: #1e293b; margin: 2px 0 0; font-weight: 600; }
+        .gu-verify-attach { width: 72px; height: 90px; background: #f8fafc; border-radius: 10px; border: 1px solid #eef2f7; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 1.3rem; cursor: pointer; text-decoration: none; flex-shrink: 0; }
+        .gu-verify-attach:hover { border-color: #bfdbfe; }
+        .gu-verify-banner { margin: 0 22px 0; background: #fef3c7; border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; color: #92400e; display: flex; gap: 10px; align-items: flex-start; }
+        .gu-verify-reason { display: none; margin-top: 12px; }
+        .gu-verify-reason textarea { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; font-family: inherit; resize: vertical; min-height: 70px; }
+        #verifyBtn.verified { border-color: #a7f3d0; color: var(--success); background: #f0fdf4; }
         .gu-modal-title { font-size: 1.05rem; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
         .gu-modal-subtitle { font-size: 0.78rem; color: #94a3b8; margin-top: 3px; font-weight: 500; }
         .gu-emp-pill {
@@ -558,6 +569,9 @@
                     <i class="fas fa-link"></i> Signing from SharePoint: <b id="signingSourceFileName"></b>
                     <button onclick="clearSigningSource()" style="float:right; border:none; background:none; color:#64748b; cursor:pointer; font-size:0.75rem;" title="Cancel and go back to manual upload"><i class="fas fa-times"></i></button>
                 </div>
+                <button class="btn btn-outline hidden" id="verifyBtn" onclick="openVerifyModal()" style="margin-bottom:8px; width:100%;">
+                    <i class="fas fa-clipboard-check" id="verifyBtnIcon"></i> <span id="verifyBtnLabel">Verify details before signing</span>
+                </button>
                 <button class="btn btn-success" id="finalizeBtn" onclick="handleFinalizeClick()">
                     <i class="fas fa-file-export" id="finalizeBtnIcon"></i> <span id="finalizeBtnLabel">Download Signed PDF</span>
                 </button>
@@ -614,6 +628,26 @@
         </div>
         <div class="gu-modal-body" id="historyModalBody">
             <div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading your signing history...</div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ VERIFY DATA MODAL ══ -->
+<div id="verifyModal" class="gu-modal-overlay">
+    <div class="gu-modal-box" style="max-width:640px;">
+        <div class="gu-modal-accent" style="background:linear-gradient(90deg,#34d399,#059669);"></div>
+        <div class="gu-modal-header">
+            <div class="gu-modal-header-left">
+                <div class="gu-modal-icon verify"><i class="fas fa-clipboard-check"></i></div>
+                <div>
+                    <div class="gu-modal-title">Verify before signing</div>
+                    <div class="gu-modal-subtitle" id="verifyModalSubtitle">Loading document details...</div>
+                </div>
+            </div>
+            <button class="gu-modal-close" onclick="closeVerifyModal()" title="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="gu-modal-body" id="verifyModalBody">
+            <div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading data to verify...</div>
         </div>
     </div>
 </div>
@@ -760,6 +794,48 @@ const SHAREPOINT_SITE_NAME = "GU-DigitalSigner-IT";                      // ✅ 
 const PENDING_DOC_LIBRARY = "DIGITAL_SIGN";    // ✅ document library name
 const STATUS_NOT_SIGNED   = "Not Signed";      // ✅ value in Document_DigiSign_Status before signing
 const STATUS_SIGNED       = "Signature Done";  // ✅ value written back after signing
+const STATUS_NEEDS_CORRECTION = "Needs Correction"; // ✅ value written back when a manager sends a doc back
+
+// ── "Verify Before Signing" — pulls the underlying data-entry record (and its bill
+//    attachments) from the "Branch Expenses" list on the AccountPayables site,
+//    matched to the pending document by Ticket Number, so a manager can check it
+//    before signing.
+// ─────────────────────────────────────────────────────────────────────────────────
+const VERIFY_SITE_NAME    = "AccountPayables";   // ✅ SharePoint site name
+const VERIFY_LIST_NAME    = "Branch Expenses";   // ✅ the list with the ticket + expense data
+const VERIFY_REFID_FIELD  = "Ticket_x0020_Number"; // ✅ internal name of "Ticket Number" — SharePoint replaces
+                                                    //    spaces with _x0020_ in internal (non-Title) column names.
+                                                    //    _ffield() below also tries the plain "Ticket Number" as
+                                                    //    a fallback, so this works either way.
+// This list stores bills as classic SharePoint "Attachments" directly on the list
+// item (confirmed from your export — there's an "Attachments" column, not a linked
+// document library), so VERIFY_LIBRARY_NAME stays blank and attachments are instead
+// fetched via the SharePoint REST API (see _fetchListItemAttachmentsRest below) —
+// Microsoft Graph v1.0 has no endpoint for classic list-item attachments.
+const VERIFY_LIBRARY_NAME = "";
+// ⚠️ One-time IT step: fetching classic attachments needs a SharePoint REST API
+// token, which is a DIFFERENT resource from Microsoft Graph. Your Azure app
+// registration currently only has Graph permissions (Sites.ReadWrite.All,
+// Mail.Send, User.Read). Ask your Azure admin to also grant this app the
+// SharePoint "AllSites.Read" (or Read.All) API permission and consent it —
+// otherwise the first attachment-preview attempt will fail with a permission error.
+
+// Which fields from VERIFY_LIST_NAME to show the manager, and in what order.
+// label = what the manager sees. field = the internal SharePoint column name.
+// Adjust freely — this list has many more columns than shown here; these are the
+// ones most relevant to "does this match the bill" verification.
+const VERIFY_FIELDS = [
+    { label: "Vendor Name",         field: "Vendor_x0020_Name" },
+    { label: "Invoice Number",      field: "Invoice_x0020_Number" },
+    { label: "Invoice Date",        field: "Invoice_x0020_Date" },
+    { label: "Invoice Amount",      field: "Invoice_x0020_Amount" },
+    { label: "Payable Amount",      field: "Payable_x0020_Amount" },
+    { label: "Expenses Category",   field: "Expenses_x0020_Category" },
+    { label: "Payment Mode",        field: "Payment_x0020_Mode" },
+    { label: "Branch Name",         field: "Branch_x0020_Name" },
+    { label: "Submitted By",        field: "Submit_x0020_By" },
+    { label: "Invoice Description", field: "Invoice_x0020_Description" }
+];
 
 // ── Derived constants
 const GRAPH         = "https://graph.microsoft.com/v1.0";
@@ -887,6 +963,35 @@ async function _getLibraryDriveId(listName) {
     const d = await _graph("GET", `/sites/${siteId}/lists/${listId}/drive`);
     _driveIdCache[listName] = d.id;
     return _driveIdCache[listName];
+}
+
+// ── Site-agnostic versions of the three lookups above, for reading from OTHER
+//    SharePoint sites (e.g. the data-entry site used by "Verify Before Signing").
+//    Cached separately by site name so they don't collide with the main site's cache.
+const _siteIdCacheOther  = {};
+const _listIdCacheOther  = {};
+const _driveIdCacheOther = {};
+async function _getSiteIdFor(siteName) {
+    if (_siteIdCacheOther[siteName]) return _siteIdCacheOther[siteName];
+    const d = await _graph("GET", `/sites/${SHAREPOINT_HOST}:/sites/${siteName}`);
+    _siteIdCacheOther[siteName] = d.id;
+    return d.id;
+}
+async function _getListIdFor(siteId, listName) {
+    const key = siteId + "|" + listName;
+    if (_listIdCacheOther[key]) return _listIdCacheOther[key];
+    const d = await _graph("GET", `/sites/${siteId}/lists?$filter=displayName eq '${listName}'`);
+    if (!d.value?.length) throw new Error(`SharePoint list "${listName}" not found on the data-entry site. Check VERIFY_LIST_NAME.`);
+    _listIdCacheOther[key] = d.value[0].id;
+    return _listIdCacheOther[key];
+}
+async function _getLibraryDriveIdFor(siteId, listName) {
+    const key = siteId + "|" + listName;
+    if (_driveIdCacheOther[key]) return _driveIdCacheOther[key];
+    const listId = await _getListIdFor(siteId, listName);
+    const d = await _graph("GET", `/sites/${siteId}/lists/${listId}/drive`);
+    _driveIdCacheOther[key] = d.id;
+    return _driveIdCacheOther[key];
 }
 
 // ── FIELD MAPPING ──────────────────────────────────────────────────────────────
@@ -2872,6 +2977,237 @@ function clearViewerAfterCompletion() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  VERIFY BEFORE SIGNING
+//  Pulls the data-entry record + bill attachments from the "Branch Expenses" list
+//  (matched by Ticket Number), so the manager can check the entered data against the
+//  actual bill before signing. Can be opened any time the sign screen is open,
+//  not just once — reopening always re-fetches the latest data.
+// ═══════════════════════════════════════════════════════════════
+async function _fetchVerificationRecord(refId) {
+    if (!refId) return null;
+    const siteId = await _getSiteIdFor(VERIFY_SITE_NAME);
+    const listId = await _getListIdFor(siteId, VERIFY_LIST_NAME);
+    // Try the encoded internal name first; if that field genuinely doesn't exist
+    // (wrong guess), fall back to filtering by "Title" is not useful here, so we
+    // surface the real error instead of masking it.
+    const d = await _graph("GET",
+        `/sites/${siteId}/lists/${listId}/items?$expand=fields&$filter=fields/${VERIFY_REFID_FIELD} eq '${refId}'&$top=1`);
+    if (!d.value?.length) return null;
+    return { itemId: d.value[0].id, fields: d.value[0].fields || {} };
+}
+
+// ── SharePoint REST token — a DIFFERENT resource/audience from the Graph token
+//    used everywhere else. Needed because classic list-item Attachments have no
+//    Microsoft Graph v1.0 endpoint; the old SharePoint REST API is the only way
+//    to read them. Requires the Azure app to also have SharePoint API permission
+//    (see the ⚠️ note near VERIFY_LIBRARY_NAME above) — if that hasn't been
+//    granted yet, this will fail with a permission/consent error, which is
+//    surfaced to the manager as a normal (non-blocking) message.
+let _spRestToken = null, _spRestTokenExp = 0;
+async function _getSpRestToken() {
+    const now = Date.now();
+    if (_spRestToken && _spRestTokenExp > now + 60000) return _spRestToken;
+    const msalApp = await _getMsalInstance();
+    const scopes = [`https://${SHAREPOINT_HOST}/AllSites.Read`];
+    if (_msalAccount) {
+        try {
+            const silent = await msalApp.acquireTokenSilent({ scopes, account: _msalAccount });
+            _spRestToken = silent.accessToken; _spRestTokenExp = now + 3500000;
+            return _spRestToken;
+        } catch (e) { /* fall through to popup */ }
+    }
+    const result = await msalApp.acquireTokenPopup({ scopes });
+    _msalAccount = result.account;
+    _spRestToken = result.accessToken; _spRestTokenExp = now + 3500000;
+    return _spRestToken;
+}
+
+// ── Classic SharePoint list-item attachments via REST (SP list item ID, not Graph GUID —
+//    Graph's numeric listItem id maps 1:1 to the classic SP item ID, so record.itemId works).
+async function _fetchListItemAttachmentsRest(itemId) {
+    const token = await _getSpRestToken();
+    const url = `https://${SHAREPOINT_HOST}/sites/${VERIFY_SITE_NAME}/_api/web/lists/getbytitle('${encodeURIComponent(VERIFY_LIST_NAME)}')/items(${itemId})/AttachmentFiles`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json;odata=nometadata" } });
+    if (!res.ok) throw new Error(`Could not load attachments (HTTP ${res.status}). This usually means the app's SharePoint API permission hasn't been granted yet — contact IT.`);
+    const data = await res.json();
+    return (data.value || []).map(a => ({ name: a.FileName, restUrl: `https://${SHAREPOINT_HOST}${a.ServerRelativeUrl}` }));
+}
+
+// ── Attachments come from a linked document library if VERIFY_LIBRARY_NAME is set,
+//    otherwise from classic list-item Attachments (this list's actual setup).
+async function _fetchVerificationAttachments(refId, itemId) {
+    if (VERIFY_LIBRARY_NAME) {
+        if (!refId) return [];
+        const siteId  = await _getSiteIdFor(VERIFY_SITE_NAME);
+        const driveId = await _getLibraryDriveIdFor(siteId, VERIFY_LIBRARY_NAME);
+        const d = await _graph("GET",
+            `/sites/${siteId}/drives/${driveId}/root/children?$expand=listItem($expand=fields)&$top=999`);
+        return (d.value || [])
+            .filter(i => i.file && String(_ffield(i.listItem?.fields, VERIFY_REFID_FIELD) ?? "").trim() === String(refId).trim())
+            .map(i => ({ name: i.name, restUrl: null, graphDownloadUrl: i["@microsoft.graph.downloadUrl"] }));
+    }
+    if (!itemId) return [];
+    return await _fetchListItemAttachmentsRest(itemId);
+}
+
+function _verifyFileKind(name) {
+    const ext = (name || "").split(".").pop().toLowerCase();
+    if (["png","jpg","jpeg","gif","webp"].includes(ext)) return "image";
+    if (ext === "pdf") return "pdf";
+    return "other";
+}
+function _verifyFileIcon(kind) {
+    if (kind === "image") return "fa-file-image";
+    if (kind === "pdf") return "fa-file-pdf";
+    return "fa-file";
+}
+
+let _verifyAttachCache = []; // last-rendered attachments, so the preview lightbox can look one up by index
+
+async function openVerifyModal() {
+    const source = currentSigningSource;
+    if (!source) return;
+    const modal = document.getElementById("verifyModal");
+    const body  = document.getElementById("verifyModalBody");
+    const subtitle = document.getElementById("verifyModalSubtitle");
+    modal.style.display = "flex";
+    subtitle.textContent = source.fileName;
+    body.innerHTML = `<div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading data to verify...</div>`;
+
+    try {
+        const record = await _fetchVerificationRecord(source.refId);
+        let attachments = [];
+        try {
+            attachments = await _fetchVerificationAttachments(source.refId, record?.itemId);
+        } catch (attachErr) {
+            // Data fields still matter even if attachments fail (e.g. permission not granted yet) —
+            // show the data, and surface the attachment error inline instead of blocking the whole popup.
+            console.warn("Attachment fetch failed:", attachErr);
+            attachments = { _error: attachErr.message };
+        }
+        _renderVerifyModal(source, record, attachments);
+    } catch (e) {
+        body.innerHTML = `<div class="gu-error-state"><i class="fas fa-triangle-exclamation"></i> Could not load verification data.<br>${e.message}</div>`;
+    }
+}
+
+function _renderVerifyModal(source, record, attachments) {
+    const body = document.getElementById("verifyModalBody");
+    const f = record?.fields || {};
+    const attachError = attachments && attachments._error;
+    const attachList = Array.isArray(attachments) ? attachments : [];
+    _verifyAttachCache = attachList;
+
+    const fieldRows = VERIFY_FIELDS.map(vf => `
+        <div class="gu-verify-field">
+            <p class="gu-verify-field-label">${vf.label}</p>
+            <p class="gu-verify-field-value">${_ffield(f, vf.field) ?? "-"}</p>
+        </div>`).join("");
+
+    let attachHtml;
+    if (attachError) {
+        attachHtml = `<p style="font-size:0.8rem; color:#d97706; margin:0;"><i class="fas fa-triangle-exclamation"></i> ${attachError}</p>`;
+    } else if (attachList.length) {
+        attachHtml = attachList.map((a, idx) => {
+            const kind = _verifyFileKind(a.name);
+            return `
+            <div class="gu-verify-attach" onclick="openAttachmentPreview(${idx})" title="${a.name}">
+                <i class="fas ${_verifyFileIcon(kind)}"></i>
+                <span class="gu-verify-attach-name">${a.name}</span>
+                <span class="gu-verify-attach-preview"><i class="fas fa-eye"></i> Preview</span>
+            </div>`;
+        }).join("");
+    } else {
+        attachHtml = `<p style="font-size:0.8rem; color:#94a3b8; margin:0;">No bill attachments found for this record.</p>`;
+    }
+
+
+    body.innerHTML = `
+        ${record ? "" : `
+        <div class="gu-verify-banner">
+            <i class="fas fa-triangle-exclamation" style="margin-top:2px;"></i>
+            <span>No matching data-entry record was found for Ref ${source.refId || "(none)"}. You can still review the PDF itself before signing.</span>
+        </div>`}
+        <div style="padding:16px 22px;">
+            <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; font-weight:600;">Submitted details — Ref ${source.refId || "-"}</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; border:1px solid #eef2f7; border-radius:10px; overflow:hidden;">
+                ${fieldRows || `<div class="gu-verify-field" style="grid-column:1/-1;">No fields configured to show.</div>`}
+            </div>
+        </div>
+        <div style="padding:0 22px 16px;">
+            <p style="font-size:0.78rem; color:#64748b; margin:0 0 10px; font-weight:600;">Bill attachments</p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">${attachHtml}</div>
+        </div>
+        <div class="gu-verify-reason" id="verifyReasonBox">
+            <p style="font-size:0.8rem; color:#64748b; margin:0 0 8px;">What needs to be fixed? The requester will see this note.</p>
+            <textarea id="verifyReasonText" placeholder="e.g. Amount on bill doesn't match entered amount"></textarea>
+        </div>
+        <div style="padding:16px 22px; border-top:1px solid #f1f5f9; display:flex; gap:10px; justify-content:flex-end; background:#fafbfc;">
+            <button class="btn btn-danger-outline" id="verifySendBackBtn" onclick="_toggleSendBackReason()">
+                <i class="fas fa-undo"></i> Send back for correction
+            </button>
+            <button class="btn btn-success" onclick="confirmVerification()">
+                <i class="fas fa-check"></i> Confirm — looks correct
+            </button>
+        </div>`;
+}
+
+function _toggleSendBackReason() {
+    const box = document.getElementById("verifyReasonBox");
+    const btn = document.getElementById("verifySendBackBtn");
+    const showing = box.style.display === "block";
+    if (showing) {
+        box.style.display = "none";
+        btn.innerHTML = '<i class="fas fa-undo"></i> Send back for correction';
+        btn.onclick = _toggleSendBackReason;
+    } else {
+        box.style.display = "block";
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Confirm send back';
+        btn.onclick = sendBackForCorrection;
+    }
+}
+
+async function sendBackForCorrection() {
+    const source = currentSigningSource;
+    if (!source) return;
+    const reasonEl = document.getElementById("verifyReasonText");
+    const reason = (reasonEl?.value || "").trim();
+    if (!reason) {
+        await guAlert("Please describe what needs to be fixed before sending this back.", 'warning');
+        return;
+    }
+    try {
+        const siteId = await _getSiteId();
+        const body = {};
+        body[source.statusFieldKey || "Document_DigiSign_Status"] = STATUS_NEEDS_CORRECTION;
+        body["CorrectionNote"] = reason; // requires a "CorrectionNote" column on DIGITAL_SIGN — see setup guide
+        await _graph("PATCH", `/sites/${siteId}/drives/${source.driveId}/items/${source.itemId}/listItem/fields`, body);
+
+        closeVerifyModal();
+        currentSigningSource = null;
+        clearViewerAfterCompletion();
+        refreshPendingDocsBadge();
+        await guAlert(`"${source.fileName}" has been sent back for correction. The requester will see your note.`, 'success');
+    } catch (e) {
+        await guAlert("Could not send this document back.\n\n" + e.message, 'danger');
+    }
+}
+
+function confirmVerification() {
+    closeVerifyModal();
+    const btn = document.getElementById("verifyBtn");
+    if (btn) {
+        btn.classList.add("verified");
+        document.getElementById("verifyBtnLabel").textContent = "Details verified";
+        document.getElementById("verifyBtnIcon").className = "fas fa-check-circle";
+    }
+}
+
+function closeVerifyModal() {
+    document.getElementById("verifyModal").style.display = "none";
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  MY SIGNING HISTORY
 //  Each branch manager can see only their own signed documents —
 //  filtered client-side by EmpID, never showing other branches' rows.
@@ -3045,6 +3381,8 @@ async function loadPendingDocIntoViewer(itemId) {
         currentSigningSource = {
             driveId, itemId: item.id, fileName: item.name,
             refId: _ffield(fields, "Ref_ID") || "",
+            docType: _ffield(fields, "Document_Type") || "",
+            reqBy:   _ffield(fields, "Requested_By") || "",
             statusFieldKey: _ffieldKey(fields, "Document_DigiSign_Status")
         };
 
@@ -3063,15 +3401,25 @@ function updateFinalizeButtonForSource() {
     const fileNm   = document.getElementById("signingSourceFileName");
     const btnLabel = document.getElementById("finalizeBtnLabel");
     const btnIcon  = document.getElementById("finalizeBtnIcon");
+    const verifyBtn = document.getElementById("verifyBtn");
     if (currentSigningSource) {
         banner.classList.remove("hidden");
         fileNm.textContent = currentSigningSource.fileName;
         btnLabel.textContent = "Sign & Update in SharePoint";
         btnIcon.className = "fas fa-cloud-upload-alt";
+        if (verifyBtn) verifyBtn.classList.remove("hidden");
     } else {
         banner.classList.add("hidden");
         btnLabel.textContent = "Download Signed PDF";
         btnIcon.className = "fas fa-file-export";
+        if (verifyBtn) verifyBtn.classList.add("hidden");
+    }
+    // Reset the "verified" visual state whenever the loaded document changes —
+    // each new document needs its own check, an old green checkmark shouldn't carry over.
+    if (verifyBtn) {
+        verifyBtn.classList.remove("verified");
+        document.getElementById("verifyBtnLabel").textContent = "Verify details before signing";
+        document.getElementById("verifyBtnIcon").className = "fas fa-clipboard-check";
     }
 }
 
