@@ -3315,6 +3315,13 @@ async function openAttachmentPreview(idx) {
     body.innerHTML = `<div class="gu-modal-loading"><i class="fas fa-spinner fa-spin"></i> Loading ${a.name}...</div>`;
 
     try {
+        const kind = _verifyFileKind(a.name);
+        // Map the file kind to the MIME type the browser needs to see in order to render it
+        // inline instead of triggering a download.
+        const MIME_BY_KIND = {
+            pdf: "application/pdf", image: "image/png" // png/jpg both display fine tagged as image/*
+        };
+
         let fileUrl;
         if (a.graphDownloadUrl) {
             fileUrl = a.graphDownloadUrl; // already pre-authenticated by Graph
@@ -3322,16 +3329,24 @@ async function openAttachmentPreview(idx) {
             const token = await _getSpRestToken();
             const res = await fetch(a.restUrl, { headers: { Authorization: `Bearer ${token}` } });
             if (!res.ok) throw new Error(`Could not load this file (HTTP ${res.status}).`);
-            fileUrl = URL.createObjectURL(await res.blob());
+            // IMPORTANT: don't trust the Content-Type SharePoint's $value endpoint sends back —
+            // it often comes through as generic application/octet-stream, which stops Chrome's
+            // built-in PDF viewer (and its zoom/page toolbar) from kicking in and makes the
+            // browser silently download the file as an unnamed blob instead of previewing it.
+            // Re-wrap the bytes in a Blob with the type we already know from the file extension.
+            const rawBlob = await res.blob();
+            const typedBlob = MIME_BY_KIND[kind] ? new Blob([rawBlob], { type: MIME_BY_KIND[kind] }) : rawBlob;
+            fileUrl = URL.createObjectURL(typedBlob);
         } else {
             throw new Error("No file URL available for this attachment.");
         }
 
-        const kind = _verifyFileKind(a.name);
         if (kind === "image") {
             body.innerHTML = `<div class="gu-attach-preview-frame"><img src="${fileUrl}" alt="${a.name}"></div>`;
         } else if (kind === "pdf") {
-            body.innerHTML = `<div class="gu-attach-preview-frame"><iframe src="${fileUrl}" title="${a.name}"></iframe></div>`;
+            // #toolbar=1&navpanes=0 asks the browser's native PDF viewer to show its zoom/page
+            // toolbar while keeping the side navigation panel collapsed.
+            body.innerHTML = `<div class="gu-attach-preview-frame"><iframe src="${fileUrl}#toolbar=1&navpanes=0" title="${a.name}"></iframe></div>`;
         } else {
             body.innerHTML = `<div class="gu-empty-state">
                 <div class="gu-empty-icon"><i class="fas fa-file"></i></div>
