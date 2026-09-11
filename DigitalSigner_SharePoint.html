@@ -3162,7 +3162,17 @@ async function _fetchListItemAttachmentsRest(itemId) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json;odata=nometadata" } });
     if (!res.ok) throw new Error(`Could not load attachments (HTTP ${res.status}). This usually means the app's SharePoint API permission hasn't been granted yet — contact IT.`);
     const data = await res.json();
-    return (data.value || []).map(a => ({ name: a.FileName, restUrl: `https://${SHAREPOINT_HOST}${a.ServerRelativeUrl}` }));
+    // NOTE: we deliberately do NOT fetch a.ServerRelativeUrl directly. That path is served by
+    // SharePoint's raw document store (not the REST API) and does not send back
+    // Access-Control-Allow-Origin headers to a cross-origin caller like this app, so the browser
+    // blocks it and fetch() throws a bare "Failed to fetch" (no HTTP status, since no response is
+    // ever received). Wrapping the same path in the REST API's GetFileByServerRelativeUrl(...)/$value
+    // endpoint keeps the request under `_api/`, which IS CORS-enabled for this registered app —
+    // exactly like the AttachmentFiles listing call just above, which already works.
+    return (data.value || []).map(a => ({
+        name: a.FileName,
+        restUrl: `https://${SHAREPOINT_HOST}/sites/${VERIFY_SITE_NAME}/_api/web/GetFileByServerRelativeUrl('${encodeURIComponent(a.ServerRelativeUrl)}')/$value`
+    }));
 }
 
 // ── Attachments come from a linked document library if VERIFY_LIBRARY_NAME is set,
