@@ -803,7 +803,7 @@ const STATUS_NEEDS_CORRECTION = "Needs Correction"; // ✅ value written back wh
 // ─────────────────────────────────────────────────────────────────────────────────
 const VERIFY_SITE_NAME    = "AccountPayables";   // ✅ SharePoint site name
 const VERIFY_LIST_NAME    = "Branch Expenses";   // ✅ the list with the ticket + expense data
-const VERIFY_REFID_FIELD  = "Ticket_x0020_Number"; // ✅ internal name of "Ticket Number" — SharePoint replaces
+const VERIFY_REFID_FIELD  = ID; // ✅ internal name of "Ticket Number" — SharePoint replaces
                                                     //    spaces with _x0020_ in internal (non-Title) column names.
                                                     //    _ffield() below also tries the plain "Ticket Number" as
                                                     //    a fallback, so this works either way.
