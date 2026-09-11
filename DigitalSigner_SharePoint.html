@@ -827,20 +827,25 @@ const VERIFY_LIBRARY_NAME = "";
 // otherwise the first attachment-preview attempt will fail with a permission error.
 
 // Which fields from VERIFY_LIST_NAME to show the manager, and in what order.
-// label = what the manager sees. field = the internal SharePoint column name.
-// Adjust freely — this list has many more columns than shown here; these are the
-// ones most relevant to "does this match the bill" verification.
+// label = what the manager sees. display = the EXACT SharePoint display name
+// (the column header you'd see in the list UI / CSV export — e.g. "Vendor Name").
+// FIXED — this used to store guessed INTERNAL names ("Vendor_x0020_Name" etc.),
+// the same wrong pattern that caused the earlier "field name not recognized"
+// error. Those guesses don't work here either: the item now loads (Ref 38214),
+// but every value showed "-" because none of the guessed internal names matched
+// the list's real ones. Using the real display name + resolving it dynamically
+// via _getListColumnMap() (below) removes the guesswork entirely.
 const VERIFY_FIELDS = [
-    { label: "Vendor Name",         field: "Vendor_x0020_Name" },
-    { label: "Invoice Number",      field: "Invoice_x0020_Number" },
-    { label: "Invoice Date",        field: "Invoice_x0020_Date" },
-    { label: "Invoice Amount",      field: "Invoice_x0020_Amount" },
-    { label: "Payable Amount",      field: "Payable_x0020_Amount" },
-    { label: "Expenses Category",   field: "Expenses_x0020_Category" },
-    { label: "Payment Mode",        field: "Payment_x0020_Mode" },
-    { label: "Branch Name",         field: "Branch_x0020_Name" },
-    { label: "Submitted By",        field: "Submit_x0020_By" },
-    { label: "Invoice Description", field: "Invoice_x0020_Description" }
+    { label: "Vendor Name",         display: "Vendor Name" },
+    { label: "Invoice Number",      display: "Invoice Number" },
+    { label: "Invoice Date",        display: "Invoice Date" },
+    { label: "Invoice Amount",      display: "Invoice Amount" },
+    { label: "Payable Amount",      display: "Payable Amount" },
+    { label: "Expenses Category",   display: "Expenses Category" },
+    { label: "Payment Mode",        display: "Payment Mode" },
+    { label: "Branch Name",         display: "Branch Name" },
+    { label: "Submitted By",        display: "Submit By" },
+    { label: "Invoice Description", display: "Invoice Description" }
 ];
 
 // ── Derived constants
@@ -1238,6 +1243,38 @@ function _ffieldKey(fields, name) {
     const target = name.toLowerCase();
     return Object.keys(fields).find(k =>
         k.toLowerCase() === target || k.toLowerCase().replace(/_x005f_/g, "_") === target) || name;
+}
+
+// ── Resolve a list's DISPLAY names ("Vendor Name") to their real INTERNAL names
+//    ("Vendor_x0020_Name", or whatever SharePoint actually assigned) by asking
+//    the list itself, instead of guessing. Guessing internal names is fragile —
+//    it breaks whenever a column was renamed after creation, created with a
+//    different original name, or added via a content type — which is exactly
+//    what caused both the "field name not recognized" error and the earlier
+//    all-blank "Verify before signing" fields. Cached per list.
+const _columnMapCache = {};
+async function _getListColumnMap(siteId, listId) {
+    const key = siteId + "|" + listId;
+    if (_columnMapCache[key]) return _columnMapCache[key];
+    const map = {};
+    let endpoint = `/sites/${siteId}/lists/${listId}/columns?$top=200`;
+    while (endpoint) {
+        const d = await _graph("GET", endpoint);
+        (d.value || []).forEach(c => {
+            if (c.name && c.displayName) map[c.displayName.trim().toLowerCase()] = c.name;
+        });
+        endpoint = d["@odata.nextLink"] ? d["@odata.nextLink"].replace(GRAPH, "") : null;
+    }
+    _columnMapCache[key] = map;
+    return map;
+}
+
+// ── Read a field by its real DISPLAY name using a resolved columnMap (see above),
+//    falling back to _ffield's tolerant guessing only if the map lookup missed.
+function _ffieldByDisplay(fields, columnMap, displayName) {
+    const internal = columnMap && columnMap[displayName.trim().toLowerCase()];
+    if (internal && fields && fields[internal] !== undefined) return fields[internal];
+    return _ffield(fields, displayName.replace(/ /g, "_x0020_"));
 }
 
 // ── Read all files (+ custom column values) from the DIGITAL_SIGN library
@@ -3006,7 +3043,15 @@ async function _fetchVerificationRecord(refId) {
     try {
         const item = await _graph("GET",
             `/sites/${siteId}/lists/${listId}/items/${encodeURIComponent(refId)}?$expand=fields`);
-        return { itemId: item.id, fields: item.fields || {} };
+        let columnMap = {};
+        try {
+            columnMap = await _getListColumnMap(siteId, listId);
+        } catch (mapErr) {
+            // Don't let a metadata-read failure block showing the record itself —
+            // _ffieldByDisplay() falls back to guessing if columnMap comes back empty.
+            console.warn("Could not resolve Branch Expenses column names:", mapErr);
+        }
+        return { itemId: item.id, fields: item.fields || {}, columnMap };
     } catch (e) {
         // A bad/deleted RefID 404s here — treat that as "no matching record",
         // same as the old code's empty-result case, rather than a hard error.
@@ -3113,6 +3158,7 @@ async function openVerifyModal() {
 function _renderVerifyModal(source, record, attachments) {
     const body = document.getElementById("verifyModalBody");
     const f = record?.fields || {};
+    const columnMap = record?.columnMap || {};
     const attachError = attachments && attachments._error;
     const attachList = Array.isArray(attachments) ? attachments : [];
     _verifyAttachCache = attachList;
@@ -3120,7 +3166,7 @@ function _renderVerifyModal(source, record, attachments) {
     const fieldRows = VERIFY_FIELDS.map(vf => `
         <div class="gu-verify-field">
             <p class="gu-verify-field-label">${vf.label}</p>
-            <p class="gu-verify-field-value">${_ffield(f, vf.field) ?? "-"}</p>
+            <p class="gu-verify-field-value">${_ffieldByDisplay(f, columnMap, vf.display) ?? "-"}</p>
         </div>`).join("");
 
     let attachHtml;
