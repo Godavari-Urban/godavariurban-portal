@@ -863,6 +863,14 @@ const PENDING_DOC_LIBRARY = "DIGITAL_SIGN";    // ✅ document library name
 const STATUS_NOT_SIGNED   = "Not Signed";      // ✅ value in Document_DigiSign_Status before signing
 const STATUS_SIGNED       = "Signature Done";  // ✅ value written back after signing
 const STATUS_NEEDS_CORRECTION = "Needs Correction"; // ✅ value written back when a manager sends a doc back
+// ⚠️ One-time IT step: add a "Correction Note" (or similarly named) single-line-of-text
+// column to the DIGITAL_SIGN library if it doesn't exist yet — Graph's error "Field
+// 'CorrectionNote' is not recognized" means SharePoint has no matching column at all
+// (not just a naming mismatch), same underlying issue as the Branch Expenses field
+// guessing problem noted above. The DISPLAY name below is resolved to whatever real
+// internal name SharePoint assigns via _getListColumnMap(), so renaming the column
+// later in SharePoint won't break this again.
+const CORRECTION_NOTE_FIELD_DISPLAY = "Correction Note";
 
 // ── "Verify Before Signing" — pulls the underlying data-entry record (and its bill
 //    attachments) from the "Branch Expenses" list on the AccountPayables site,
@@ -3392,16 +3400,38 @@ async function sendBackForCorrection() {
     }
     try {
         const siteId = await _getSiteId();
+        const listId = await _getListId(PENDING_DOC_LIBRARY);
         const body = {};
         body[source.statusFieldKey || "Document_DigiSign_Status"] = STATUS_NEEDS_CORRECTION;
-        body["CorrectionNote"] = reason; // requires a "CorrectionNote" column on DIGITAL_SIGN — see setup guide
+
+        // Resolve the note column's real internal name from the list itself rather than
+        // guessing. If the column hasn't been created in SharePoint yet, skip writing the
+        // note (rather than let a missing column block the whole "send back" action) and
+        // tell the manager afterward so IT can add it.
+        let noteColumnMissing = false;
+        try {
+            const columnMap = await _getListColumnMap(siteId, listId);
+            const noteInternalName = columnMap[CORRECTION_NOTE_FIELD_DISPLAY.trim().toLowerCase()];
+            if (noteInternalName) {
+                body[noteInternalName] = reason;
+            } else {
+                noteColumnMissing = true;
+            }
+        } catch (e) {
+            noteColumnMissing = true;
+        }
+
         await _graph("PATCH", `/sites/${siteId}/drives/${source.driveId}/items/${source.itemId}/listItem/fields`, body);
 
         closeVerifyModal();
         currentSigningSource = null;
         clearViewerAfterCompletion();
         refreshPendingDocsBadge();
-        await guAlert(`"${source.fileName}" has been sent back for correction. The requester will see your note.`, 'success');
+        if (noteColumnMissing) {
+            await guAlert(`"${source.fileName}" has been sent back for correction, but your note could not be saved — ask IT to add a "${CORRECTION_NOTE_FIELD_DISPLAY}" column to the ${PENDING_DOC_LIBRARY} library.`, 'warning');
+        } else {
+            await guAlert(`"${source.fileName}" has been sent back for correction. The requester will see your note.`, 'success');
+        }
     } catch (e) {
         await guAlert("Could not send this document back.\n\n" + e.message, 'danger');
     }
