@@ -803,10 +803,16 @@ const STATUS_NEEDS_CORRECTION = "Needs Correction"; // ✅ value written back wh
 // ─────────────────────────────────────────────────────────────────────────────────
 const VERIFY_SITE_NAME    = "AccountPayables";   // ✅ SharePoint site name
 const VERIFY_LIST_NAME    = "Branch Expenses";   // ✅ the list with the ticket + expense data
-const VERIFY_REFID_FIELD  = ID; // ✅ internal name of "Ticket Number" — SharePoint replaces
-                                                    //    spaces with _x0020_ in internal (non-Title) column names.
-                                                    //    _ffield() below also tries the plain "Ticket Number" as
-                                                    //    a fallback, so this works either way.
+const VERIFY_REFID_FIELD  = "Ticket_x0020_Number"; // ⚠️ only used by the library-based attachment path below
+                                                    //    (VERIFY_LIBRARY_NAME set), which is currently unused
+                                                    //    since this list stores classic Attachments instead.
+                                                    //    The main record lookup (_fetchVerificationRecord) no
+                                                    //    longer needs this — it fetches the item by its real
+                                                    //    SharePoint ID instead of guessing an internal field
+                                                    //    name, which is what caused "A provided field name is
+                                                    //    not recognized". If VERIFY_LIBRARY_NAME is ever set,
+                                                    //    replace this guess with the list's confirmed internal
+                                                    //    name for "Ticket Number" first.
 // This list stores bills as classic SharePoint "Attachments" directly on the list
 // item (confirmed from your export — there's an "Attachments" column, not a linked
 // document library), so VERIFY_LIBRARY_NAME stays blank and attachments are instead
@@ -2987,13 +2993,26 @@ async function _fetchVerificationRecord(refId) {
     if (!refId) return null;
     const siteId = await _getSiteIdFor(VERIFY_SITE_NAME);
     const listId = await _getListIdFor(siteId, VERIFY_LIST_NAME);
-    // Try the encoded internal name first; if that field genuinely doesn't exist
-    // (wrong guess), fall back to filtering by "Title" is not useful here, so we
-    // surface the real error instead of masking it.
-    const d = await _graph("GET",
-        `/sites/${siteId}/lists/${listId}/items?$expand=fields&$filter=fields/${VERIFY_REFID_FIELD} eq '${refId}'&$top=1`);
-    if (!d.value?.length) return null;
-    return { itemId: d.value[0].id, fields: d.value[0].fields || {} };
+    // FIXED — was: $filter=fields/${VERIFY_REFID_FIELD} eq '${refId}', which needed
+    // a correctly-guessed INTERNAL SharePoint column name ("Ticket_x0020_Number").
+    // That guess was wrong, so Graph rejected the query with exactly the error seen
+    // in the app: "A provided field name is not recognized".
+    //
+    // Confirmed from Branch_Expenses__3_.csv: the list's own built-in "ID" column
+    // and the "Ticket Number" column carry the same value on every row, and that
+    // value is what DIGITAL_SIGN stores in its "Ref_ID" field. So refId IS the
+    // Branch Expenses item's real SharePoint item ID — we can fetch it directly
+    // with no field-name lookup/guessing involved at all.
+    try {
+        const item = await _graph("GET",
+            `/sites/${siteId}/lists/${listId}/items/${encodeURIComponent(refId)}?$expand=fields`);
+        return { itemId: item.id, fields: item.fields || {} };
+    } catch (e) {
+        // A bad/deleted RefID 404s here — treat that as "no matching record",
+        // same as the old code's empty-result case, rather than a hard error.
+        if (/404|itemNotFound|does not exist/i.test(e.message || "")) return null;
+        throw e;
+    }
 }
 
 // ── SharePoint REST token — a DIFFERENT resource/audience from the Graph token
