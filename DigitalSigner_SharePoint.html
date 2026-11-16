@@ -593,10 +593,10 @@
                     <h4>Your Authorization Signature</h4>
                     <div id="slots"></div>
                     <div id="adminZone" class="hidden">
-                        <button class="btn btn-danger-outline" onclick="adminResetSignature()">
-                            <i class="fas fa-user-shield"></i> Admin: Reset Signature
-                        </button>
-                    </div>
+    <button class="btn btn-danger-outline" onclick="requestSignatureReset()">
+        <i class="fas fa-paper-plane"></i> Request Signature Reset
+    </button>
+</div>
                 </div>
 
                 <!-- Signing History -->
@@ -1180,7 +1180,11 @@ const _SP_WRITE_MAP_PWDRESET = {
     "RequestedAt": "RequestedAt",
     "Status":      "Status"
 };
-
+// GU_Signatures: one row per PERSON (EmpID in Title). Item-level permissions keep rows private.
+const _SP_WRITE_MAP_SIGNATURES = {
+    "EmpID":"Title", "SigData":"SigData", "SigVersion":"SigVersion",
+    "SigStatus":"SigStatus", "CreatedAt":"CreatedAt"
+};
 function _getWriteMap(listName) {
     if (listName === "GU_Branches")          return _SP_WRITE_MAP_BRANCHES;
     if (listName === "GU_Settings")          return _SP_WRITE_MAP_SETTINGS;
@@ -1188,6 +1192,7 @@ function _getWriteMap(listName) {
     if (listName === "GU_Admins")            return _SP_WRITE_MAP_ADMINS;
     if (listName === "GU_SignedDocs")        return _SP_WRITE_MAP_SIGNEDDOCS;
     if (listName === "GU_PwdResetRequests")  return _SP_WRITE_MAP_PWDRESET;
+    if (listName === "GU_Signatures") return _SP_WRITE_MAP_SIGNATURES;
     return {};
 }
 
@@ -1532,17 +1537,6 @@ async function callScript(payload) {
             return { ok: true };
         }
 
-        // ── Admin reset signature (verify admin password via GU_Admins)
-        case "adminResetSig": {
-            const { adminPass } = payload;
-            const admins = await _spGetAll("GU_Admins");
-            if (!admins || admins.length === 0) return { ok: false, msg: "Admin record not found in GU_Admins." };
-            const storedPass = String(admins[0].Password || "").trim();
-            const inputPass  = String(adminPass || "").trim();
-            if (!storedPass) return { ok: false, msg: "Admin password not configured in GU_Admins." };
-            if (storedPass !== inputPass) return { ok: false, msg: "Incorrect Admin Password." };
-            return { ok: true };
-        }
 
         // ── Check device/workstation status on every app open
         case "checkDeviceStatus": {
@@ -1707,7 +1701,6 @@ function generateEventId() {
 
 
 function clearLocalAuthorization(empId) {
-    if (empId) localStorage.removeItem("sig_" + empId);
     localStorage.removeItem("gu_activated_empId");
     localStorage.removeItem("gu_pending_empId");
     pendingEmpId      = "";
@@ -1730,17 +1723,7 @@ async function enforceDeviceStatus(empId) {
         return false;
     }
 
-    // Handle signature revoked by IT
-    if (res.ok && res.signatureRevoked) {
-        const sigKey = "sig_" + empId;
-        const storedVersion = localStorage.getItem(sigKey + "_version");
-        const serverVersion = res.signatureVersion || "";
-        // Only clear if version changed or no version tracking (legacy)
-        if (!serverVersion || storedVersion !== serverVersion) {
-            localStorage.removeItem(sigKey);
-            localStorage.removeItem(sigKey + "_version");
-        }
-    }
+
 
     return true;
 }
@@ -1914,23 +1897,29 @@ async function finishAuthorizedLogin(item, displayName) {
         String(item.FirstLogin || "").toLowerCase() === "true" ||
         !item.PassHash;
 
-    const buildUserAndLaunch = () => {
-        setPasswordModeActive((item.Branch || "") + "  •  " + (item.EmpID || ""));
-        pendingEmpId = item.EmpID || displayName;
-        currentUser = {
-            name:    item.EmpName || displayName,
-            branch:  item.Branch  || "",
-            post:    item.Post    || "",
-            empCode: item.EmpID   || displayName
-        };
-        const sigKey = "sig_" + currentUser.empCode;
-        if (item.SignatureRevoked === true || String(item.SignatureRevoked || "") === "true") {
-            localStorage.removeItem(sigKey);
-        }
-        currentUser.savedSig = localStorage.getItem(sigKey) || null;
-        document.getElementById("authOverlay").style.display = "none";
-        launchMainApp();
+    const buildUserAndLaunch = async () => {
+    setPasswordModeActive((item.Branch || "") + "  •  " + (item.EmpID || ""));
+    pendingEmpId = item.EmpID || displayName;
+    currentUser = {
+        name:         item.EmpName || displayName,
+        branch:       item.Branch  || "",
+        post:         item.Post    || "",
+        empCode:      item.EmpID   || displayName,
+        primaryEmpId: item.PrimaryEmpID || ""
     };
+    currentUser.savedSig = null;
+    try {
+        const ownerId = sigOwnerId();
+        let sig = await loadMySignature(ownerId);
+        if (!sig) sig = await migrateLocalSignature(item, ownerId);   // one-time, old browsers
+        currentUser.savedSig = sig;
+    } catch (e) {
+        console.warn("Signature load failed:", e);
+        await guAlert("Could not load your saved signature from SharePoint.\n\n" + e.message, 'warning');
+    }
+    document.getElementById("authOverlay").style.display = "none";
+    launchMainApp();
+};
 
     if (needsPasswordSetup) {
         if (statusEl) statusEl.innerText = "";
@@ -1952,7 +1941,7 @@ async function finishAuthorizedLogin(item, displayName) {
                     return;
                 }
                 await guAlert("Password set successfully! You're now signed in.", 'success');
-                buildUserAndLaunch();
+                await buildUserAndLaunch();
             }
         );
         return;
@@ -1979,7 +1968,7 @@ async function finishAuthorizedLogin(item, displayName) {
         }
     }
 
-    buildUserAndLaunch();
+    await buildUserAndLaunch();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2520,20 +2509,7 @@ async function handleLogin() {
             }
         }
 
-        // Load saved signature from localStorage (keyed by empId)
-        const sigKey = "sig_" + res.empId;
-
-        // If IT revoked signature via SharePoint, clear local copy
-        if (res.signatureRevoked) {
-            const storedVersion = localStorage.getItem(sigKey + "_version");
-            const serverVersion = res.signatureVersion || "";
-            if (!serverVersion || storedVersion !== serverVersion) {
-                localStorage.removeItem(sigKey);
-                localStorage.removeItem(sigKey + "_version");
-            }
-        }
-
-        currentUser.savedSig = localStorage.getItem(sigKey) || null;
+ currentUser.savedSig = null;   // signatures now come from SharePoint (see finishAuthorizedLogin)
 
         launchMainApp();
 
@@ -2636,7 +2612,7 @@ function forceLogout() {
     // Reset file input so same file can be re-chosen next login
     const pdfInput = document.getElementById("pdfUpload");
     if (pdfInput) pdfInput.value = "";
-
+const di = document.getElementById("dragImg"); if (di) di.removeAttribute("src");
     // Hide signature drag box
     const dragSig = document.getElementById("dragSigContainer");
     if (dragSig) dragSig.style.display = "none";
@@ -2702,6 +2678,8 @@ function openSecurePrompt(title, desc, callback) {
 }
 function closeModal() {
     document.getElementById("secureModal").style.display = "none";
+    const inp = document.getElementById("modalInput");
+    inp.type = "password"; inp.placeholder = "Enter password here...";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2725,14 +2703,86 @@ canvas.ontouchend   = ()  => { drawing = false; };
 
 function clearSig() { ctx.clearRect(0, 0, 300, 130); }
 
+// ── Shrink image so it fits a SharePoint text column (~63,000 chars)
+async function shrinkSignature(dataUrl, type = "image/png") {
+    const img = new Image(); img.src = dataUrl; await img.decode();
+    const s = Math.min(1, 360 / img.width);
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.width * s));
+    c.height = Math.max(1, Math.round(img.height * s));
+    const x = c.getContext("2d");
+    if (type === "image/jpeg") { x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); }
+    x.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL(type, 0.7);
+}
+
+// One signature per PERSON, not per secondary branch
+function sigOwnerId() {
+    return currentUser.primaryEmpId || currentUser.empCode;
+}
+
+async function _prepareSigData(dataUrl) {
+    let data = await shrinkSignature(dataUrl);
+    if (data.length > 60000) data = await shrinkSignature(dataUrl, "image/jpeg");
+    return data.length > 60000 ? null : data;
+}
+
+async function _storeSignature(data) {
+    await _spPost("GU_Signatures", {
+        EmpID: sigOwnerId(), SigData: data, SigVersion: String(Date.now()),
+        SigStatus: "ACTIVE", CreatedAt: new Date().toISOString()
+    });
+}
+
 async function savePermanentSig(dataUrl) {
-    const ok = await guConfirm("Register this as your internal authorization signature?\n\nThis will be permanently locked to your profile.", 'confirm', 'Yes, Register', 'Cancel');
-    if (ok) {
-        const sigKey = "sig_" + currentUser.empCode;
-        localStorage.setItem(sigKey, dataUrl);
-        currentUser.savedSig = dataUrl;
+    const ok = await guConfirm("Register this as your authorization signature?\n\nIt will be stored securely in SharePoint.", 'confirm', 'Yes, Register', 'Cancel');
+    if (!ok) return;
+    const data = await _prepareSigData(dataUrl);
+    if (!data) { await guAlert("Signature image is too large. Please use a simpler/smaller image.", 'warning'); return; }
+    try {
+        await _storeSignature(data);
+        currentUser.savedSig = data;
         refreshSignatureUI();
+    } catch (e) {
+        await guAlert("Could not save signature: " + e.message, 'danger');
+        return;
     }
+    try {
+        await _logJourney(currentUser.branch, currentUser.empCode, currentUser.name, currentUser.post, currentIP || "",
+            "AUTHORIZED", "SIGNATURE_REGISTERED", "Signature saved to SharePoint.");
+    } catch (e) { /* non-fatal */ }
+}
+
+// Item-level permissions mean this returns ONLY the caller's own rows
+async function loadMySignature(ownerId) {
+    const rows = await _spGetAll("GU_Signatures", true);
+    const mine = rows.filter(r =>
+        String(r.EmpID || "").toLowerCase() === String(ownerId).toLowerCase() &&
+        String(r.SigStatus || "").toUpperCase() === "ACTIVE");
+    return mine.length ? mine[mine.length - 1].SigData : null;
+}
+
+// One-time migration of an old browser-stored signature, then delete the local copy
+async function migrateLocalSignature(item, ownerId) {
+    const keys = [...new Set(["sig_" + item.EmpID, "sig_" + ownerId])];
+    const wipe = () => keys.forEach(k => { localStorage.removeItem(k); localStorage.removeItem(k + "_version"); });
+    let local = null;
+    for (const k of keys) { const v = localStorage.getItem(k); if (v) { local = v; break; } }
+    if (!local) return null;
+
+    // If IT revoked/reset this person, never resurrect an old local copy
+    if (item.SignatureRevoked === true || String(item.SignatureRevoked || "").toLowerCase() === "true") {
+        wipe(); return null;
+    }
+    const data = await _prepareSigData(local);
+    if (!data) { wipe(); return null; }
+    await _storeSignature(data);
+    wipe();
+    try {
+        await _logJourney(item.Branch, item.EmpID, item.EmpName, item.Post, currentIP || "",
+            "AUTHORIZED", "SIGNATURE_MIGRATED", "Local signature moved to SharePoint.");
+    } catch (e) {}
+    return data;
 }
 
 async function lockAndSaveSig(type) {
@@ -2772,38 +2822,34 @@ function refreshSignatureUI() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ADMIN RESET SIGNATURE — verified via Google Sheet
+//  REQUEST SIGNATURE RESET
 // ═══════════════════════════════════════════════════════════════
-async function adminResetSignature() {
+function requestSignatureReset() {
     openSecurePrompt(
-        "Admin Reset",
-        "Enter Admin Password to reset this signature:",
-        async (adminPass) => {
-            if (!adminPass) return;
-
+        "Request Signature Reset",
+        "Tell IT why your signature must be reset. IT will delete it and you will register a new one.",
+        async (reason) => {
+            reason = (reason || "").trim();
+            if (!reason) { await guAlert("Please enter a reason.", 'warning'); return; }
             try {
-                const res = await callScript({
-                    action:    "adminResetSig",
-                    adminPass: adminPass
+                const existing = await _spGetAll("GU_PwdResetRequests", true);
+                const dup = existing.some(r =>
+                    String(r.EmpID || "").trim().toUpperCase() === String(currentUser.empCode).toUpperCase() &&
+                    String(r.Status || "").toUpperCase() === "PENDING" &&
+                    String(r.Reason || "").toUpperCase().startsWith("SIGNATURE RESET:"));
+                if (dup) { await guAlert("You already have a pending signature reset request.", 'info'); return; }
+                await _spPost("GU_PwdResetRequests", {
+                    EmpID: currentUser.empCode, EmpName: currentUser.name, Branch: currentUser.branch,
+                    Reason: "SIGNATURE RESET: " + reason,
+                    RequestedAt: new Date().toISOString(), Status: "PENDING"
                 });
-
-                if (!res.ok) {
-                    await guAlert("Error: " + (res.msg || "Incorrect Admin Password."), 'danger');
-                    return;
-                }
-
-                // Clear signature from localStorage
-                const sigKey = "sig_" + currentUser.empCode;
-                localStorage.removeItem(sigKey);
-                currentUser.savedSig = null;
-                refreshSignatureUI();
-                await guAlert("Signature has been reset successfully.", 'success');
-
-            } catch (err) {
-                await guAlert("Network error. Please check connection.", 'danger');
-            }
+                await guAlert("Request sent to IT. Your signature will be reset after IT approves it.", 'success');
+            } catch (e) { await guAlert("Could not send request: " + e.message, 'danger'); }
         }
     );
+    // the prompt box is a password field by default: show the reason as plain text
+    const inp = document.getElementById("modalInput");
+    inp.type = "text"; inp.placeholder = "Reason for reset...";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3744,10 +3790,11 @@ async function submitForgotPasswordRequest() {
         //    Duplicate guard: skip if a PENDING request already exists for this EmpID
         try {
             const existing = await _spGetAll("GU_PwdResetRequests", true);
-            const hasPending = existing.some(r =>
-                (r.EmpID || r.Title || "").toString().trim().toUpperCase() === resolvedEmpId.toString().trim().toUpperCase() &&
-                (r.Status || "").toString().toUpperCase() === "PENDING"
-            );
+const hasPending = existing.some(r =>
+    (r.EmpID || r.Title || "").toString().trim().toUpperCase() === resolvedEmpId.toString().trim().toUpperCase() &&
+    (r.Status || "").toString().toUpperCase() === "PENDING" &&
+    !(r.Reason || "").toString().toUpperCase().startsWith("SIGNATURE RESET:")
+);
             if (!hasPending) {
                 await _spPost("GU_PwdResetRequests", {
                     EmpID:       resolvedEmpId,
