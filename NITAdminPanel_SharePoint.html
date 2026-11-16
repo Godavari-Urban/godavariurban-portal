@@ -3200,6 +3200,34 @@ Fill the form on the left to preview the registration email that will be sent to
         </div>
         <button class="btn" style="width:100%;background:#8b5cf6;color:#fff;" onclick="transferManager()"><i class="fas fa-right-left"></i> Transfer Manager</button>
       </div>
+      <!-- Reset Signature -->
+<div class="card" style="border-top:3px solid #f59e0b;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+    <div style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,0.12);display:grid;place-items:center;flex-shrink:0;">
+      <i class="fas fa-signature" style="color:#f59e0b;font-size:0.95rem;"></i>
+    </div>
+    <div>
+      <div style="font-weight:700;font-size:0.92rem;color:var(--white);">Reset Signature</div>
+      <div style="font-size:0.73rem;color:var(--muted);">Delete saved signature for a fresh start</div>
+    </div>
+  </div>
+  <hr style="border:none;border-top:1px solid var(--border);margin:14px 0;">
+  <div class="form-group" style="margin-bottom:10px;">
+    <label>Branch</label>
+    <select id="rs_branch" onchange="syncToolEmpId('rs')" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.88rem;font-family:'IBM Plex Sans',sans-serif;width:100%;">
+      <option value="">— Select Branch —</option>
+    </select>
+  </div>
+  <div class="form-group" style="margin-bottom:10px;">
+    <label>Connected EmpID</label>
+    <input type="text" id="rs_empid" readonly placeholder="Auto-fills…" style="font-family:'IBM Plex Mono',monospace;opacity:0.85;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.85rem;width:100%;">
+  </div>
+  <div class="form-group" style="margin-bottom:14px;">
+    <label>Reason</label>
+    <input type="text" id="rs_reason" placeholder="e.g. Signature compromised" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:0.88rem;font-family:'IBM Plex Sans',sans-serif;width:100%;">
+  </div>
+  <button class="btn" style="width:100%;background:#f59e0b;color:#1a1a00;" onclick="resetSignatureFromTool()"><i class="fas fa-signature"></i> Reset Signature</button>
+</div>
 
     </div>
 
@@ -3995,6 +4023,10 @@ async function logJourney(branch, empId, empName, post, allowedIP, status, actio
     });
 }
 
+async function _sigResetSafe(item, reason) {
+    try { return { sigReset: await resetSignatureForBranch(item, reason) }; }
+    catch (e) { console.warn("Signature reset failed:", e); return { sigReset: 0, sigWarn: e.message }; }
+}
 // ─── callScript() REPLACEMENT ────────────────────────────────────────────────
 //  All old callScript({ action: "..." }) calls are routed through this
 //  dispatcher which calls the appropriate Graph API function.
@@ -4223,6 +4255,7 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
             const { empId, branch, reason } = payload;
             const item = await spFindItem("GU_Branches", "EmpID", empId);
             if (!item) return { ok: false, msg: "Branch not found." };
+            const sig = await _sigResetSafe(item, reason || "Branch closed");
             // Archive to manager history
             await spCreateItem("GU_ManagerHist", {
                 Timestamp: new Date().toISOString(),
@@ -4238,7 +4271,7 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
             });
             await logJourney(item.Branch, item.EmpID, item.EmpName, item.Post, item.AllowedIP,
                 "BRANCH_CLOSED", "BRANCH_CLOSED", reason || "Branch closed by IT Admin", "IT Admin");
-            return { ok: true };
+            return { ok: true, ...sig };
         }
 
         // ── Transfer manager to another branch
@@ -4331,6 +4364,7 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
             const { secondaryEmpId, reason } = payload;
             const item = await spFindItem("GU_Branches", "EmpID", secondaryEmpId);
             if (!item) return { ok: false, msg: "Secondary branch not found." };
+            const sig = await _sigResetSafe(item, reason || "Secondary assignment removed");
             await spUpdateItem("GU_Branches", item._spId, {
                 EmpID: "", EmpName: "", Post: "", PassHash: "",
                 PrimaryEmpID: "", Activated: false, FirstLogin: true, SignatureRevoked: true,
@@ -4338,7 +4372,7 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
             });
             await logJourney(item.Branch, secondaryEmpId, item.EmpName, item.Post, item.AllowedIP,
                 "PENDING_FILE_SEND", "SECONDARY_REMOVED", reason || "Secondary assignment removed.", "IT Admin");
-            return { ok: true };
+            return { ok: true, ...sig };
         }
 
         // ── Manager changed / deactivated / replaced
@@ -4352,7 +4386,7 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
             if (!String(item.EmpID || "").trim()) {
                 return { ok: false, msg: `${item.Branch || "This branch"} is already vacant — there is no active manager to deactivate.` };
             }
-
+             const sig = await _sigResetSafe(item, reason || "Manager changed");   // ← ADD THIS
             await spCreateItem("GU_ManagerHist", {
                 Timestamp: new Date().toISOString(),
                 Branch: item.Branch, OldEmpID: item.EmpID, OldEmpName: item.EmpName,
@@ -4388,14 +4422,106 @@ ${godavariEmailButton(appLink, "✅ Open E-SIGNHUB App", "#059669")}
                 newManager ? "PENDING_ACTIVATION" : "VACANT",
                 newManager ? "MANAGER_REPLACED" : "MANAGER_DEACTIVATED",
                 reason, "IT Admin");
-            return { ok: true };
+              return { ok: true, ...sig };
         }
 
         default:
             return { ok: false, msg: `Unknown action: ${payload.action}` };
     }
 }
+// ═══════════ SIGNATURE RESET (GU_Signatures) ═══════════
+// Reads raw items so we can see who created each row (createdBy)
+async function _sigItems() {
+    const siteId = await getSiteId(), listId = await getListId("GU_Signatures");
+    let url = `/sites/${siteId}/lists/${listId}/items?$expand=fields&$top=999`;
+    const items = [];
+    while (url) {
+        const d = await graphRequest("GET", url);
+        (d.value || []).forEach(i => items.push({
+            id: i.id,
+            empId: String(i.fields?.Title || "").trim().toLowerCase(),
+            by: String(i.createdBy?.user?.email || "").trim().toLowerCase()
+        }));
+        url = d["@odata.nextLink"] ? d["@odata.nextLink"].replace(GRAPH, "") : null;
+    }
+    return { siteId, listId, items };
+}
 
+// Delete signature rows for one person. onlyEmail (optional) limits deletion to rows
+// created by that M365 account (used for secondary branches).
+async function resetSignature(ownerId, onlyEmail) {
+    const owner = String(ownerId || "").trim().toLowerCase();
+    if (!owner) return 0;
+    const email = String(onlyEmail || "").trim().toLowerCase();
+    const { siteId, listId, items } = await _sigItems();
+    const targets = items.filter(r => r.empId === owner && (!email || !r.by || r.by === email));
+    for (const r of targets) {
+        await graphRequest("DELETE", `/sites/${siteId}/lists/${listId}/items/${r.id}`);
+    }
+    return targets.length;
+}
+
+// Resets the signature that belongs to a GU_Branches record.
+// Primary branch  -> deletes ALL rows of that person.
+// Secondary branch -> deletes only the copy made by that branch's own account,
+//                     so the primary manager's signature is untouched.
+async function resetSignatureForBranch(item, reason) {
+    const isSecondary = !!String(item.PrimaryEmpID || "").trim();
+    const ownerId = isSecondary ? item.PrimaryEmpID : item.EmpID;
+    if (!String(ownerId || "").trim()) return 0;
+    const deleted = await resetSignature(ownerId, isSecondary ? item.BranchEmail : null);
+    if (!isSecondary) {
+        await spUpdateItem("GU_Branches", item._spId, { SignatureVersion: String(Date.now()) });
+    }
+    await logJourney(item.Branch, item.EmpID, item.EmpName, item.Post, item.AllowedIP,
+        item.WorkstationStatus || "AUTHORIZED", "SIGNATURE_RESET",
+        `${reason || "Signature deleted by IT"} (${deleted} record(s) removed)`, "IT Admin");
+    return deleted;
+}
+
+// Manual card in IT Tools
+function resetSignatureFromTool() {
+    const empId  = document.getElementById("rs_empid").value.trim();
+    const reason = document.getElementById("rs_reason").value.trim();
+    if (!empId)  { toast("Select a branch.", "error"); return; }
+    if (!reason) { toast("Enter a reason.", "error"); return; }
+    const item = allBranches.find(b => String(b.EmpID || "").trim() === empId);
+    if (!item)   { toast("Branch record not found.", "error"); return; }
+    confirmDialog(
+        "Reset Signature",
+        `Delete the registered signature for ${item.EmpName || empId} (${item.Branch})? The manager will be asked to draw/upload a new one at next login. Old signed PDFs stay valid.`,
+        async () => {
+            const n = await resetSignatureForBranch(item, reason);
+            toast(`Signature reset for ${item.Branch} (${n} record(s) deleted).`);
+            document.getElementById("rs_branch").value = "";
+            document.getElementById("rs_empid").value  = "";
+            document.getElementById("rs_reason").value = "";
+            loadAllData();
+        },
+        '<i class="fas fa-signature"></i> Confirm Reset',
+        true
+    );
+}
+
+// Request raised from the branch app ("SIGNATURE RESET: ..." in GU_PwdResetRequests)
+async function processSigReset(spId, branch, empId, btn) {
+    if (!confirm(`Delete the signature for ${branch} (${empId})?\n\nThe manager must register a new one at next login.`)) return;
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner spin"></i> Resetting…';
+    try {
+        const item = await spFindItem("GU_Branches", "EmpID", empId);
+        if (!item) throw new Error("Branch record not found in GU_Branches.");
+        const n = await resetSignatureForBranch(item, "Signature reset requested by manager");
+        await spUpdateItem("GU_PwdResetRequests", spId, { Status: "DONE" });
+        toast(`✅ Signature reset for ${branch} (${n} record(s) deleted).`, "success");
+        loadPwdResetRequests();
+    } catch (e) {
+        toast("❌ Reset failed: " + e.message, "error");
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
 // ── Admin state
 let allBranches = [];
 let managerHistory = [];
@@ -4483,6 +4609,9 @@ function toast(msg, type = "success") {
     el.innerHTML = icon + " " + msg;
     el.className = "show " + type;
     setTimeout(() => el.className = "", 3500);
+}
+function sigWarnSuffix(res) {
+    return res && res.sigWarn ? ` (Signature reset failed: ${res.sigWarn})` : "";
 }
 
 function setDataLoading(isLoading) {
@@ -4685,6 +4814,7 @@ async function loadPwdResetRequests() {
             branch  = branch  || "—";
 
             const reason = req.Reason || "No reason provided";
+            const isSig = String(reason).toUpperCase().startsWith("SIGNATURE RESET:");
             const reqAt  = req.RequestedAt ? formatDate(req.RequestedAt) : "—";
             const spId   = req._spId;
             const safeBranch = branch.replace(/'/g, "\\'");
@@ -4707,10 +4837,15 @@ async function loadPwdResetRequests() {
                   </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
-                  <button class="btn btn-danger" style="font-size:0.8rem;padding:9px 14px;"
-                    onclick="processPwdReset('${spId}', '${safeBranch}', '${safeEmpId}', this)">
-                    <i class="fas fa-redo"></i> Reset Login
-                  </button>
+                  ${isSig
+  ? `<button class="btn btn-danger" style="font-size:0.8rem;padding:9px 14px;"
+        onclick="processSigReset('${spId}', '${safeBranch}', '${safeEmpId}', this)">
+        <i class="fas fa-signature"></i> Reset Signature
+     </button>`
+  : `<button class="btn btn-danger" style="font-size:0.8rem;padding:9px 14px;"
+        onclick="processPwdReset('${spId}', '${safeBranch}', '${safeEmpId}', this)">
+        <i class="fas fa-redo"></i> Reset Login
+     </button>`}
                   <button class="btn btn-outline" style="font-size:0.8rem;padding:9px 14px;"
                     onclick="dismissPwdResetRequest('${spId}', '${safeBranch}', '${safeEmpId}', this)">
                     <i class="fas fa-times"></i> Dismiss
@@ -6003,7 +6138,7 @@ async function closeBranch(empId, branch) {
                 reason:    reasonInput || "Branch closed from IT Admin Panel"
             });
             if (!res.ok) { toast("Close failed: " + res.msg, "error"); return; }
-            toast(`Branch "${branch}" marked as CLOSED. Record retained in system.`);
+                        toast(`Branch "${branch}" marked as CLOSED. Record retained in system.` + sigWarnSuffix(res), res.sigWarn ? "error" : "success"); 
             loadAllData();
         } catch(e) { toast("Network error", "error"); }
       },
@@ -6523,7 +6658,7 @@ function buildToolBranchOptions() {
         const label = `${b.Branch || "(No Branch)"} — ${b.EmpName || b.EmpID || ""}`;
         return `<option value="${esc(b.EmpID)}">${esc(label)}</option>`;
     }).join("");
-    ["rak_branch", "rl_branch", "mc_branch"].forEach(id => {
+    ["rak_branch", "rl_branch", "mc_branch", "rs_branch"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = options;
     });
@@ -6543,6 +6678,7 @@ function buildToolBranchOptions() {
     syncToolEmpId("rak");
     syncToolEmpId("rl");
     syncToolEmpId("mc");
+    syncToolEmpId("rs"); 
     syncTransferSource();
     buildManagerBenchOptions();
 }
@@ -6683,7 +6819,7 @@ async function transferManager() {
                     reason: reason || "Manager transferred from IT Admin Panel"
                 });
                 if (!res.ok) { toast("Transfer failed: " + res.msg, "error"); return; }
-                toast(`${empId} transferred to ${targetBranch}.`);
+                                toast(`${empId} transferred to ${targetBranch}.`);
                 document.getElementById("tm_from_branch").value = "";
                 document.getElementById("tm_empid").value = "";
                 document.getElementById("tm_to_branch").value = "";
@@ -7026,7 +7162,7 @@ async function removeSecondaryBranch(secIdx) {
                     reason: "Secondary assignment removed from IT Admin Panel."
                 });
                 if (!res.ok) { toast("Remove failed: " + res.msg, "error"); return; }
-                toast(`Secondary assignment removed from ${sec.Branch}.`);
+                                toast(`Secondary assignment removed from ${sec.Branch}.` + sigWarnSuffix(res), res.sigWarn ? "error" : "success");
                 await loadAllData();
                 // Re-render the modal with fresh data
                 const freshPrimary = allBranches.find(b => String(b.EmpID || "").trim().toUpperCase() === primaryEmpId);
@@ -7100,12 +7236,13 @@ async function managerChanged() {
                     };
                 }
 
-                const res = await callScript(payload);
+                                const res = await callScript(payload);
                 if (!res.ok) { toast("Error: " + res.msg, "error"); return; }
 
-                toast(hasNewManager
+                toast((hasNewManager
                     ? `${empId} archived. ${newEmpId} is now pending activation for this branch.`
-                    : `${empId} deactivated. Branch app will clear saved signature on next open.`);
+                    : `${empId} deactivated. Branch app will clear saved signature on next open.`)
+                    + sigWarnSuffix(res), res.sigWarn ? "error" : "success");
                 document.getElementById("mc_branch").value = "";
                 document.getElementById("mc_empid").value = "";
                 document.getElementById("mc_key").value = "";
