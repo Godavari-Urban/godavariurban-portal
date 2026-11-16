@@ -1183,7 +1183,7 @@ const _SP_WRITE_MAP_PWDRESET = {
 // GU_Signatures: one row per PERSON (EmpID in Title). Item-level permissions keep rows private.
 const _SP_WRITE_MAP_SIGNATURES = {
     "EmpID":"Title", "SigData":"SigData", "SigVersion":"SigVersion",
-    "SigStatus":"SigStatus", "CreatedAt":"CreatedAt"
+    "SigStatus":"Status", "CreatedAt":"CreatedAt"
 };
 function _getWriteMap(listName) {
     if (listName === "GU_Branches")          return _SP_WRITE_MAP_BRANCHES;
